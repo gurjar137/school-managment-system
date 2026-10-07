@@ -7,6 +7,7 @@ import 'core/config/supabase_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/providers/app_providers.dart';
 import 'core/routing/app_router.dart';
+import 'core/desktop/desktop_shortcuts_wrapper.dart';
 
 import 'core/auth/recovery_session_state.dart';
 
@@ -146,12 +147,13 @@ class SchoolApp extends ConsumerWidget {
     final themeMode = ref.watch(themeProvider);
 
     return MaterialApp.router(
-      title: 'School Command Center',
+      title: 'School Management OS',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
       routerConfig: router,
+      builder: (context, child) => DesktopShortcutsWrapper(child: child ?? const SizedBox.shrink()),
     );
   }
 }

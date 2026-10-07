@@ -639,48 +639,56 @@ class _TimetableManagementScreenState extends ConsumerState<TimetableManagementS
         backgroundColor: isDark ? AppColors.darkSurface : AppColors.pureWhite,
         title: Row(
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Timetable Management',
-                      style: AppTypography.titleMedium.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (_selectedYear != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.softLavender.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
                         child: Text(
-                          _selectedYear!.name,
-                          style: AppTypography.labelSmall.copyWith(
-                            color: AppColors.midnightNavy,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 11,
+                          'Timetable Management',
+                          style: AppTypography.titleMedium.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (_selectedYear != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.softLavender.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _selectedYear!.name,
+                            style: AppTypography.labelSmall.copyWith(
+                              color: AppColors.midnightNavy,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-                Text(
-                  'Centralized schedule engine with conflict protection & live teacher sync',
-                  style: AppTypography.bodySmall.copyWith(
-                    color: AppColors.coolGray,
-                    fontSize: 11,
+                    ],
                   ),
-                ),
-              ],
+                  Text(
+                    'Centralized schedule engine with conflict protection & live teacher sync',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.coolGray,
+                      fontSize: 11,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 10),
 
             // Timetable Status Badge
             Container(

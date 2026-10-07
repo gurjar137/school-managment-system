@@ -185,166 +185,215 @@ class AdminDashboardScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
 
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildAdminStatCard(
-                      title: 'Total Students',
-                      value: '${metrics.totalStudents}',
-                      badgeText: 'All Classes',
-                      color: AppColors.midnightNavy,
-                      textColor: AppColors.pureWhite,
-                      icon: Icons.groups_rounded,
-                      onTap: () => context.go('/students'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildAdminStatCard(
-                      title: 'Total Teachers',
-                      value: '${metrics.totalTeachers}',
-                      badgeText: 'Faculty',
-                      color: isDark ? AppColors.darkSurface : AppColors.lavenderLight.withOpacity(0.6),
-                      textColor: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
-                      icon: Icons.badge_rounded,
-                      onTap: () => context.go('/teachers'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildAdminStatCard(
-                      title: 'Total Classes',
-                      value: '${metrics.totalClasses}',
-                      badgeText: 'Sections',
-                      color: isDark ? AppColors.darkSurface : AppColors.greenLight,
-                      textColor: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
-                      icon: Icons.meeting_room_rounded,
-                      onTap: () => context.push('/classes'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildAdminStatCard(
-                      title: 'Pending Fees',
-                      value: _formatCurrency(metrics.pendingFees),
-                      badgeText: metrics.pendingFees > 0 ? 'Dues Active' : 'No Dues',
-                      color: isDark ? AppColors.darkSurface : AppColors.amberLight,
-                      textColor: isDark ? AppColors.pureWhite : AppColors.amberDark,
-                      icon: Icons.payments_rounded,
-                      onTap: () => context.go('/fees'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cardStudents = _buildAdminStatCard(
+                    title: 'Total Students',
+                    value: '${metrics.totalStudents}',
+                    badgeText: 'All Classes',
+                    color: AppColors.midnightNavy,
+                    textColor: AppColors.pureWhite,
+                    icon: Icons.groups_rounded,
+                    onTap: () => context.go('/students'),
+                  );
+                  final cardTeachers = _buildAdminStatCard(
+                    title: 'Total Teachers',
+                    value: '${metrics.totalTeachers}',
+                    badgeText: 'Faculty',
+                    color: isDark ? AppColors.darkSurface : AppColors.lavenderLight.withOpacity(0.6),
+                    textColor: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+                    icon: Icons.badge_rounded,
+                    onTap: () => context.go('/teachers'),
+                  );
+                  final cardClasses = _buildAdminStatCard(
+                    title: 'Total Classes',
+                    value: '${metrics.totalClasses}',
+                    badgeText: 'Sections',
+                    color: isDark ? AppColors.darkSurface : AppColors.greenLight,
+                    textColor: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+                    icon: Icons.meeting_room_rounded,
+                    onTap: () => context.push('/classes'),
+                  );
+                  final cardFees = _buildAdminStatCard(
+                    title: 'Pending Fees',
+                    value: _formatCurrency(metrics.pendingFees),
+                    badgeText: metrics.pendingFees > 0 ? 'Dues Active' : 'No Dues',
+                    color: isDark ? AppColors.darkSurface : AppColors.amberLight,
+                    textColor: isDark ? AppColors.pureWhite : AppColors.amberDark,
+                    icon: Icons.payments_rounded,
+                    onTap: () => context.go('/fees'),
+                  );
 
-              // Quick Administrative Actions
-              const SectionHeader(title: 'Administrative Control Hub'),
-              const SizedBox(height: 8),
+                  if (constraints.maxWidth >= 950) {
+                    return Row(
+                      children: [
+                        Expanded(child: cardStudents),
+                        const SizedBox(width: 12),
+                        Expanded(child: cardTeachers),
+                        const SizedBox(width: 12),
+                        Expanded(child: cardClasses),
+                        const SizedBox(width: 12),
+                        Expanded(child: cardFees),
+                      ],
+                    );
+                  }
 
-              BentoCard(
-                child: Column(
-                  children: [
-                    _buildAdminOption(
-                      context,
-                      icon: Icons.search_rounded,
-                      title: 'Global Student Search',
-                      subtitle: metrics.totalStudents > 0
-                          ? 'Search across ${metrics.totalStudents} students instantly'
-                          : 'Search students instantly',
-                      color: AppColors.softLavender,
-                      onTap: () => context.push('/admin-student-search'),
-                    ),
-                    const Divider(height: 1),
-                    _buildAdminOption(
-                      context,
-                      icon: Icons.badge_outlined,
-                      title: 'Class-Wise Teacher Directory',
-                      subtitle: metrics.teacherDirectorySubtitle,
-                      color: AppColors.mutedGreen,
-                      onTap: () => context.go('/teachers'),
-                    ),
-                    const Divider(height: 1),
-                    _buildAdminOption(
-                      context,
-                      icon: Icons.payments_outlined,
-                      title: 'Campus Fees & Revenue Dashboard',
-                      subtitle: 'Collected ${_formatCurrency(metrics.collectedFees)} • Pending ${_formatCurrency(metrics.pendingFees)}',
-                      color: AppColors.warmAmber,
-                      onTap: () => context.go('/fees'),
-                    ),
-                    const Divider(height: 1),
-                    _buildAdminOption(
-                      context,
-                      icon: Icons.analytics_outlined,
-                      title: 'Campus Attendance Telemetry',
-                      subtitle: 'Today campus presence: 94.7%',
-                      color: AppColors.midnightNavy,
-                      onTap: () => context.push('/attendance-analytics'),
-                    ),
-                  ],
-                ),
+                  return Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: cardStudents),
+                          const SizedBox(width: 12),
+                          Expanded(child: cardTeachers),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: cardClasses),
+                          const SizedBox(width: 12),
+                          Expanded(child: cardFees),
+                        ],
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 24),
 
-              // PENDING ACTIONS TELEMETRY HUB
-              Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: AppColors.softCoral,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'PENDING ACTIONS & APPROVALS',
-                    style: AppTypography.labelMedium.copyWith(
-                      letterSpacing: 1.2,
-                      color: AppColors.coolGray,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
+              // Responsive Two-Column Layout for Hubs on Desktop
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final controlHub = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionHeader(title: 'Administrative Control Hub'),
+                      const SizedBox(height: 8),
+                      BentoCard(
+                        child: Column(
+                          children: [
+                            _buildAdminOption(
+                              context,
+                              icon: Icons.search_rounded,
+                              title: 'Global Student Search',
+                              subtitle: metrics.totalStudents > 0
+                                  ? 'Search across ${metrics.totalStudents} students instantly'
+                                  : 'Search students instantly',
+                              color: AppColors.softLavender,
+                              onTap: () => context.push('/admin-student-search'),
+                            ),
+                            const Divider(height: 1),
+                            _buildAdminOption(
+                              context,
+                              icon: Icons.badge_outlined,
+                              title: 'Class-Wise Teacher Directory',
+                              subtitle: metrics.teacherDirectorySubtitle,
+                              color: AppColors.mutedGreen,
+                              onTap: () => context.go('/teachers'),
+                            ),
+                            const Divider(height: 1),
+                            _buildAdminOption(
+                              context,
+                              icon: Icons.payments_outlined,
+                              title: 'Campus Fees & Revenue Dashboard',
+                              subtitle: 'Collected ${_formatCurrency(metrics.collectedFees)} • Pending ${_formatCurrency(metrics.pendingFees)}',
+                              color: AppColors.warmAmber,
+                              onTap: () => context.go('/fees'),
+                            ),
+                            const Divider(height: 1),
+                            _buildAdminOption(
+                              context,
+                              icon: Icons.analytics_outlined,
+                              title: 'Campus Attendance Telemetry',
+                              subtitle: 'Today campus presence: 94.7%',
+                              color: AppColors.midnightNavy,
+                              onTap: () => context.push('/attendance-analytics'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
 
-              BentoCard(
-                child: Column(
-                  children: [
-                    _buildAdminOption(
-                      context,
-                      icon: Icons.fact_check_outlined,
-                      title: '4 Results Awaiting Review',
-                      subtitle: 'Submitted exams waiting for Admin approval & publishing',
-                      color: AppColors.softCoral,
-                      onTap: () => context.go('/results'),
-                    ),
-                    const Divider(height: 1),
-                    _buildAdminOption(
-                      context,
-                      icon: Icons.event_note_rounded,
-                      title: '3 Teacher Leave Requests',
-                      subtitle: 'Pending leave applications requiring review',
-                      color: AppColors.warmAmber,
-                      onTap: () => context.push('/teacher-leaves'),
-                    ),
-                    const Divider(height: 1),
-                    _buildAdminOption(
-                      context,
-                      icon: Icons.search_rounded,
-                      title: 'Categorized Global Search',
-                      subtitle: 'Search across Students, Teachers, Receipts, and Results',
-                      color: AppColors.softLavender,
-                      onTap: () => context.push('/global-search'),
-                    ),
-                  ],
-                ),
+                  final pendingHub = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 18,
+                            decoration: BoxDecoration(
+                              color: AppColors.softCoral,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'PENDING ACTIONS & APPROVALS',
+                            style: AppTypography.labelMedium.copyWith(
+                              letterSpacing: 1.2,
+                              color: AppColors.coolGray,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      BentoCard(
+                        child: Column(
+                          children: [
+                            _buildAdminOption(
+                              context,
+                              icon: Icons.fact_check_outlined,
+                              title: '4 Results Awaiting Review',
+                              subtitle: 'Submitted exams waiting for Admin approval & publishing',
+                              color: AppColors.softCoral,
+                              onTap: () => context.go('/results'),
+                            ),
+                            const Divider(height: 1),
+                            _buildAdminOption(
+                              context,
+                              icon: Icons.event_note_rounded,
+                              title: '3 Teacher Leave Requests',
+                              subtitle: 'Pending leave applications requiring review',
+                              color: AppColors.warmAmber,
+                              onTap: () => context.push('/teacher-leaves'),
+                            ),
+                            const Divider(height: 1),
+                            _buildAdminOption(
+                              context,
+                              icon: Icons.search_rounded,
+                              title: 'Categorized Global Search',
+                              subtitle: 'Search across Students, Teachers, Receipts, and Results',
+                              color: AppColors.softLavender,
+                              onTap: () => context.push('/global-search'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+
+                  if (constraints.maxWidth >= 1050) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: controlHub),
+                        const SizedBox(width: 20),
+                        Expanded(child: pendingHub),
+                      ],
+                    );
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      controlHub,
+                      const SizedBox(height: 24),
+                      pendingHub,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 24),
 
