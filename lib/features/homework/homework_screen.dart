@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/academic_models.dart';
 
 class HomeworkScreen extends ConsumerWidget {
@@ -14,9 +15,12 @@ class HomeworkScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.watch(schoolRepositoryProvider);
+    final user = ref.watch(authProvider);
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/home'),
         title: Text('Homework Assignments', style: AppTypography.titleLarge),
         actions: [
           IconButton(
@@ -26,7 +30,7 @@ class HomeworkScreen extends ConsumerWidget {
         ],
       ),
       body: FutureBuilder(
-        future: repo.getHomework(),
+        future: repo.getHomework(schoolId: user?.schoolId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingStateWidget(message: 'Fetching homework records...');

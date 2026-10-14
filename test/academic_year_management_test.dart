@@ -293,10 +293,10 @@ void main() {
         endDate: DateTime(2027, 3, 31),
       );
 
-      // Create for KPS
+      // Create for School 1 (School B) with identical dates to verify tenant isolation
       await service.createAcademicYear(
-        schoolId: kpsSchoolId,
-        name: '2026-2027 KPS',
+        schoolId: school1Id,
+        name: '2026-2027 School 1',
         startDate: DateTime(2026, 4, 1),
         endDate: DateTime(2027, 3, 31),
       );
@@ -305,8 +305,16 @@ void main() {
       final gwYears = await service.fetchAcademicYears(greenwoodSchoolId);
       for (final y in gwYears) {
         expect(y.schoolId, equals(greenwoodSchoolId));
-        expect(y.schoolId, isNot(equals(kpsSchoolId)));
         expect(y.schoolId, isNot(equals(school1Id)));
+        expect(y.schoolId, isNot(equals(kpsSchoolId)));
+      }
+
+      // Fetch School 1 years -> strictly contains only School 1
+      final s1Years = await service.fetchAcademicYears(school1Id);
+      for (final y in s1Years) {
+        expect(y.schoolId, equals(school1Id));
+        expect(y.schoolId, isNot(equals(greenwoodSchoolId)));
+        expect(y.schoolId, isNot(equals(kpsSchoolId)));
       }
 
       // Fetch KPS years -> strictly contains only KPS
@@ -314,6 +322,7 @@ void main() {
       for (final y in kpsYears) {
         expect(y.schoolId, equals(kpsSchoolId));
         expect(y.schoolId, isNot(equals(greenwoodSchoolId)));
+        expect(y.schoolId, isNot(equals(school1Id)));
       }
     });
 

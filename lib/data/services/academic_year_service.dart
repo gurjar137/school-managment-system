@@ -67,6 +67,22 @@ class AcademicYearService {
       return local;
     }
 
+    // Pure offline / unconfigured mock mode ONLY
+    if (!SupabaseConfig.isConfigured) {
+      final mockYear = AcademicYearModel(
+        id: 'mock_ay_${cleanSchoolId.hashCode.abs()}',
+        schoolId: cleanSchoolId,
+        name: '2026-2027',
+        startDate: DateTime(2026, 4, 1),
+        endDate: DateTime(2027, 3, 31),
+        isCurrent: true,
+        status: AccountStatus.active,
+        createdAt: DateTime(2026, 9, 1),
+      );
+      _cache.add(mockYear);
+      return [mockYear];
+    }
+
     return [];
   }
 

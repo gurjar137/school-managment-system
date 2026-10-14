@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/reusable_widgets.dart';
 import '../../data/models/school_management_models.dart';
 
@@ -55,10 +56,10 @@ class _AdminGlobalSearchScreenState extends ConsumerState<AdminGlobalSearchScree
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
       appBar: AppBar(
+        leading: const AppBackButton(fallbackPath: '/home'),
+        leadingWidth: 96.0,
         title: Text('Categorized Global Search', style: AppTypography.titleLarge),
       ),
       body: Column(

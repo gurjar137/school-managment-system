@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../data/models/user_model.dart';
+import '../../core/widgets/app_back_button.dart';
 
 class StaffLoginScreen extends ConsumerStatefulWidget {
   const StaffLoginScreen({super.key});
@@ -87,6 +88,8 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/role-selection'),
         title: Text('Staff & Teacher Login', style: AppTypography.titleLarge),
       ),
       body: SafeArea(
@@ -170,6 +173,15 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> {
                     child: _isLoading
                         ? const CircularProgressIndicator(color: AppColors.pureWhite)
                         : const Text('Sign In to Staff Portal'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () => context.go('/login/admin'),
+                    icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
+                    label: const Text('School Administrator? Sign in to Admin Portal'),
                   ),
                 ),
               ],

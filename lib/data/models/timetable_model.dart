@@ -78,6 +78,8 @@ class TimetableEntryModel {
   final String academicYearId;
   final String? classId;
   final String? sectionId;
+  final String? classDisplayCode;
+  final String? sectionDisplayCode;
   final String? className;
   final String? sectionName;
   final int dayOfWeek; // 1 = Monday, ..., 6 = Saturday, 7 = Sunday
@@ -101,6 +103,8 @@ class TimetableEntryModel {
     required this.academicYearId,
     this.classId,
     this.sectionId,
+    this.classDisplayCode,
+    this.sectionDisplayCode,
     this.className,
     this.sectionName,
     required this.dayOfWeek,
@@ -118,6 +122,16 @@ class TimetableEntryModel {
     this.createdAt,
     this.updatedAt,
   });
+
+  static bool isValidUuid(String? val) {
+    if (val == null || val.trim().isEmpty) return false;
+    return RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(val.trim());
+  }
+
+  bool get hasCanonicalClassUuid => isValidUuid(classId);
+  bool get hasCanonicalSectionUuid => isValidUuid(sectionId);
+  bool get hasCanonicalTeacherUuid => isValidUuid(teacherProfileId);
+  bool get hasCanonicalAcademicYearUuid => isValidUuid(academicYearId);
 
   bool get isDraft => status == TimetableStatus.draft;
   bool get isPublished => status == TimetableStatus.published;
@@ -205,6 +219,8 @@ class TimetableEntryModel {
       'academic_year_id': academicYearId,
       'class_id': classId,
       'section_id': sectionId,
+      'class_display_code': classDisplayCode,
+      'section_display_code': sectionDisplayCode,
       'class_name': className,
       'section_name': sectionName,
       'day_of_week': dayOfWeek,
@@ -224,10 +240,9 @@ class TimetableEntryModel {
     };
   }
 
-  Map<String, dynamic> toSupabaseMap() {
+  Map<String, dynamic> toSupabaseMap({bool requireValidUuid = false}) {
     final map = <String, dynamic>{
       'school_id': schoolId,
-      'academic_year_id': academicYearId,
       'day_of_week': dayOfWeek,
       'start_time': startTime.length == 5 ? '$startTime:00' : startTime,
       'end_time': endTime.length == 5 ? '$endTime:00' : endTime,
@@ -235,23 +250,25 @@ class TimetableEntryModel {
       'status': status.displayName,
     };
 
-    final isRealUuid = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(id);
-    if (isRealUuid) {
+    if (id.isNotEmpty && (!requireValidUuid || isValidUuid(id))) {
       map['id'] = id;
     }
-    if (classId != null && classId!.isNotEmpty) {
+    if (academicYearId.isNotEmpty && (!requireValidUuid || isValidUuid(academicYearId))) {
+      map['academic_year_id'] = academicYearId;
+    }
+    if (classId != null && classId!.isNotEmpty && (!requireValidUuid || isValidUuid(classId))) {
       map['class_id'] = classId;
     }
-    if (sectionId != null && sectionId!.isNotEmpty) {
+    if (sectionId != null && sectionId!.isNotEmpty && (!requireValidUuid || isValidUuid(sectionId))) {
       map['section_id'] = sectionId;
     }
     if (periodNumber != null) {
       map['period_number'] = periodNumber;
     }
-    if (subjectId != null && subjectId!.isNotEmpty) {
+    if (subjectId != null && subjectId!.isNotEmpty && (!requireValidUuid || isValidUuid(subjectId))) {
       map['subject_id'] = subjectId;
     }
-    if (teacherProfileId != null && teacherProfileId!.isNotEmpty) {
+    if (teacherProfileId != null && teacherProfileId!.isNotEmpty && (!requireValidUuid || isValidUuid(teacherProfileId))) {
       map['teacher_profile_id'] = teacherProfileId;
     }
     if (teacherName != null && teacherName!.isNotEmpty) {
@@ -263,7 +280,7 @@ class TimetableEntryModel {
     if (notes != null && notes!.isNotEmpty) {
       map['notes'] = notes;
     }
-    if (createdBy != null && createdBy!.isNotEmpty) {
+    if (createdBy != null && createdBy!.isNotEmpty && (!requireValidUuid || isValidUuid(createdBy))) {
       map['created_by'] = createdBy;
     }
     return map;
@@ -285,6 +302,8 @@ class TimetableEntryModel {
       academicYearId: json['academic_year_id']?.toString() ?? '',
       classId: json['class_id']?.toString(),
       sectionId: json['section_id']?.toString(),
+      classDisplayCode: json['class_display_code']?.toString(),
+      sectionDisplayCode: json['section_display_code']?.toString(),
       className: json['class_name']?.toString() ??
           (json['classes'] is Map ? json['classes']['name']?.toString() : null),
       sectionName: json['section_name']?.toString() ??
@@ -317,6 +336,8 @@ class TimetableEntryModel {
     String? academicYearId,
     String? classId,
     String? sectionId,
+    String? classDisplayCode,
+    String? sectionDisplayCode,
     String? className,
     String? sectionName,
     int? dayOfWeek,
@@ -340,6 +361,8 @@ class TimetableEntryModel {
       academicYearId: academicYearId ?? this.academicYearId,
       classId: classId ?? this.classId,
       sectionId: sectionId ?? this.sectionId,
+      classDisplayCode: classDisplayCode ?? this.classDisplayCode,
+      sectionDisplayCode: sectionDisplayCode ?? this.sectionDisplayCode,
       className: className ?? this.className,
       sectionName: sectionName ?? this.sectionName,
       dayOfWeek: dayOfWeek ?? this.dayOfWeek,

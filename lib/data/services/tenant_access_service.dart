@@ -35,6 +35,7 @@ class TenantAccessService {
   /// Validate current active session against the tenant access hierarchy.
   Future<AppAccessResult> validateCurrentSession({
     String? configuredAppIdentifier,
+    String? configuredSchoolId,
     String? expectedDevSchoolId,
     DateTime? referenceDate,
   }) async {
@@ -52,15 +53,22 @@ class TenantAccessService {
     return validateAccessForUser(
       authUserId: user.id,
       configuredAppIdentifier: configuredAppIdentifier,
+      configuredSchoolId: configuredSchoolId,
       expectedDevSchoolId: expectedDevSchoolId,
       referenceDate: referenceDate,
     );
   }
 
-  /// Execute the 5-step access validation for a specific authenticated user ID.
+  /// Execute access validation for a specific authenticated user ID.
+  ///
+  /// Resolves authoritative tenant context from Supabase profiles.
+  /// In dedicated builds (where SCHOOL_ID or APP_IDENTIFIER is specified),
+  /// strictly enforces matching school membership.
+  /// In multi-tenant builds, validates that the user's school and app subscription are active.
   Future<AppAccessResult> validateAccessForUser({
     required String authUserId,
     String? configuredAppIdentifier,
+    String? configuredSchoolId,
     String? expectedDevSchoolId,
     DateTime? referenceDate,
   }) async {
@@ -72,15 +80,8 @@ class TenantAccessService {
       );
     }
 
-    final targetAppIdentifier = (configuredAppIdentifier ?? AppConfig.appIdentifier).trim();
-    if (targetAppIdentifier.isEmpty) {
-      return AppAccessResult.blocked(
-        status: AppAccessStatus.appNotFound,
-        userMessage: 'Application identifier is not configured for this build.',
-        detailedReason: 'APP_IDENTIFIER build configuration is missing. Provide --dart-define=APP_IDENTIFIER=<school_app_identifier>.',
-      );
-    }
-
+    final targetAppIdentifier = (configuredAppIdentifier ?? AppConfig.configuredAppIdentifier)?.trim();
+    final targetSchoolId = (configuredSchoolId ?? AppConfig.configuredSchoolId)?.trim();
     final targetDevSchoolId = kReleaseMode
         ? null
         : (expectedDevSchoolId ?? AppConfig.devSchoolId)?.trim();
@@ -124,6 +125,17 @@ class TenantAccessService {
         );
       }
 
+      // Check compile-time dedicated school UUID if configured
+      if (targetSchoolId != null && targetSchoolId.isNotEmpty) {
+        if (rawSchoolId != targetSchoolId) {
+          return AppAccessResult.blocked(
+            status: AppAccessStatus.appMismatch,
+            userMessage: 'This app is not configured for your school.',
+            detailedReason: 'Application is dedicated to school UUID "$targetSchoolId", but user account belongs to school "$rawSchoolId".',
+          );
+        }
+      }
+
       // -------------------------------------------------------------
       // 2. Resolve School Record & Verify School Status
       // -------------------------------------------------------------
@@ -135,6 +147,18 @@ class TenantAccessService {
             .eq('id', rawSchoolId)
             .maybeSingle();
       } catch (_) {}
+
+      // If initial select returned null, refresh session and retry once in case auth session token was refreshed or stale
+      if (schoolData == null && client.auth.currentSession != null) {
+        try {
+          await client.auth.refreshSession();
+          schoolData = await client
+              .from('schools')
+              .select()
+              .eq('id', rawSchoolId)
+              .maybeSingle();
+        } catch (_) {}
+      }
 
       if (schoolData == null) {
         return AppAccessResult.blocked(
@@ -151,32 +175,40 @@ class TenantAccessService {
           app: null,
           subscription: null,
           configuredAppIdentifier: targetAppIdentifier,
+          configuredSchoolId: targetSchoolId,
           expectedDevSchoolId: targetDevSchoolId,
           referenceDate: referenceDate,
         );
       }
 
       // -------------------------------------------------------------
-      // 3. Resolve Dedicated School Management App & Match Identifier
+      // 3. Resolve Dedicated School Management App Scoped to School
       // -------------------------------------------------------------
       Map<String, dynamic>? appData;
       try {
-        appData = await client
-            .from('school_management_apps')
-            .select()
-            .eq('app_identifier', targetAppIdentifier)
-            .maybeSingle();
-      } catch (_) {}
-
-      if (appData == null) {
-        try {
+        if (targetAppIdentifier != null && targetAppIdentifier.isNotEmpty) {
+          appData = await client
+              .from('school_management_apps')
+              .select()
+              .eq('school_id', rawSchoolId)
+              .eq('app_identifier', targetAppIdentifier)
+              .maybeSingle();
+        }
+        if (appData == null) {
           appData = await client
               .from('school_management_apps')
               .select()
               .eq('school_id', rawSchoolId)
               .maybeSingle();
-        } catch (_) {}
-      }
+        }
+        if (appData == null && targetAppIdentifier != null && targetAppIdentifier.isNotEmpty) {
+          appData = await client
+              .from('school_management_apps')
+              .select()
+              .eq('app_identifier', targetAppIdentifier)
+              .maybeSingle();
+        }
+      } catch (_) {}
 
       final app = appData != null ? SchoolManagementAppModel.fromJson(appData) : null;
 
@@ -203,6 +235,7 @@ class TenantAccessService {
         app: app,
         subscription: subscription,
         configuredAppIdentifier: targetAppIdentifier,
+        configuredSchoolId: targetSchoolId,
         expectedDevSchoolId: targetDevSchoolId,
         referenceDate: referenceDate,
       );
@@ -223,7 +256,8 @@ class TenantAccessService {
     required SchoolModel? school,
     required SchoolManagementAppModel? app,
     required SchoolAppSubscriptionModel? subscription,
-    required String configuredAppIdentifier,
+    String? configuredAppIdentifier,
+    String? configuredSchoolId,
     String? expectedDevSchoolId,
     bool requireSubscription = false,
     DateTime? referenceDate,
@@ -243,18 +277,22 @@ class TenantAccessService {
     // Takes strict precedence over subscription and app-mismatch errors.
     // -------------------------------------------------------------
     if (school.status != AccountStatus.active) {
-      return AppAccessResult.schoolDeactivated(
+      return AppAccessResult.blocked(
+        status: AppAccessStatus.schoolInactive,
+        userMessage: 'School access is currently inactive.',
+        detailedReason: 'School status in public.schools is ${school.status.displayName.toUpperCase()}.',
         school: school,
         app: app,
-        detailedReason: 'School status in public.schools is ${school.status.displayName.toUpperCase()}.',
       );
     }
 
     if (app != null && !app.isActive) {
-      return AppAccessResult.schoolDeactivated(
+      return AppAccessResult.blocked(
+        status: AppAccessStatus.appInactive,
+        userMessage: 'Application access is currently disabled for this school.',
+        detailedReason: 'School Management App access is toggled to INACTIVE.',
         school: school,
         app: app,
-        detailedReason: 'School Management App access is toggled to INACTIVE.',
       );
     }
 
@@ -323,6 +361,20 @@ class TenantAccessService {
     // -------------------------------------------------------------
     // PRIORITY 4: APP_IDENTIFIER & Tenant Mismatch
     // -------------------------------------------------------------
+    // Enforce configured school ID if this build is locked to a specific school
+    if (configuredSchoolId != null && configuredSchoolId.trim().isNotEmpty) {
+      final targetSchool = configuredSchoolId.trim();
+      if (school.id != targetSchool) {
+        return AppAccessResult.blocked(
+          status: AppAccessStatus.appMismatch,
+          userMessage: 'This app is not configured for this school.',
+          detailedReason: 'Configured school ID ("$targetSchool") does not match profile school ID ("${school.id}").',
+          school: school,
+          app: app,
+        );
+      }
+    }
+
     if (app == null) {
       return AppAccessResult.blocked(
         status: AppAccessStatus.appNotFound,
@@ -331,28 +383,22 @@ class TenantAccessService {
       );
     }
 
-    final targetId = configuredAppIdentifier.trim();
-    if (targetId.isEmpty) {
-      return AppAccessResult.blocked(
-        status: AppAccessStatus.appNotFound,
-        userMessage: 'Application identifier is not configured for this build.',
-        detailedReason: 'configuredAppIdentifier is empty.',
-        school: school,
-        app: app,
-      );
+    // Enforce configured app identifier if this build is locked to an identifier
+    if (configuredAppIdentifier != null && configuredAppIdentifier.trim().isNotEmpty) {
+      final targetId = configuredAppIdentifier.trim();
+      final dbIdentifier = (app.appIdentifier ?? '').trim();
+      if (dbIdentifier != targetId) {
+        return AppAccessResult.blocked(
+          status: AppAccessStatus.appMismatch,
+          userMessage: 'This app is not configured for this school.',
+          detailedReason: 'Configured app identifier ("$targetId") does not match school record ("$dbIdentifier").',
+          school: school,
+          app: app,
+        );
+      }
     }
 
-    final dbIdentifier = (app.appIdentifier ?? '').trim();
-    if (dbIdentifier != targetId) {
-      return AppAccessResult.blocked(
-        status: AppAccessStatus.appMismatch,
-        userMessage: 'This app is not configured for this school.',
-        detailedReason: 'Configured app identifier ("$targetId") does not match school record ("$dbIdentifier").',
-        school: school,
-        app: app,
-      );
-    }
-
+    // Enforce that the resolved app record matches the authenticated user's school
     if (app.schoolId != school.id) {
       return AppAccessResult.blocked(
         status: AppAccessStatus.appMismatch,

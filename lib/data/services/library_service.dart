@@ -65,11 +65,9 @@ class LibraryService {
           return profile['school_id'].toString();
         }
       } catch (_) {}
-    }
-    if (SupabaseConfig.isConfigured) {
       throw const TenantResolutionException('Active school could not be resolved for current user. Please log in again.');
     }
-    return 'offline_mock_school';
+    return '6254bee9-151d-4332-8a1c-3994af7d2153';
   }
 
   Future<List<LibraryBookModel>> fetchBooks({String? schoolId}) async {
@@ -84,7 +82,7 @@ class LibraryService {
             .eq('school_id', activeSchoolId)
             .order('title', ascending: true);
 
-        if (data is List) {
+        if (data.isNotEmpty) {
           final liveList = data.map((d) => LibraryBookModel.fromJson(d)).toList();
           _cachedBooks.clear();
           _cachedBooks.addAll(liveList);

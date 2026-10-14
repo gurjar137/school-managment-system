@@ -71,7 +71,7 @@ class AttendanceService {
             .from('academic_years')
             .select('id, start_date, end_date, status')
             .eq('school_id', schoolId);
-        if (res is List && res.isNotEmpty) {
+        if (res.isNotEmpty) {
           final activeYears = res.where((y) => (y['status']?.toString().toLowerCase() == 'active')).toList();
           final matching = activeYears.where((ay) {
             final s = ay['start_date'] as String?;
@@ -137,14 +137,39 @@ class AttendanceService {
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
         final dateStr = date.toIso8601String().substring(0, 10);
-        final data = await _client!
+
+        List<String>? targetStudentIds;
+        if (classId.isNotEmpty || sectionId.isNotEmpty) {
+          var stuQuery = _client!.from('students').select('id');
+          if (schoolId.isNotEmpty) {
+            stuQuery = stuQuery.eq('school_id', schoolId);
+          }
+          if (classId.isNotEmpty) {
+            stuQuery = stuQuery.eq('class_name', classId);
+          }
+          if (sectionId.isNotEmpty) {
+            stuQuery = stuQuery.eq('section_name', sectionId);
+          }
+          final stuRows = await stuQuery;
+          targetStudentIds = stuRows.map((r) => r['id'].toString()).toList();
+          if (targetStudentIds.isEmpty) {
+            return [];
+          }
+        }
+
+        var query = _client!
             .from('attendance')
             .select()
-            .eq('school_id', schoolId)
-            .eq('class_id', classId)
-            .eq('section_id', sectionId)
             .eq('attendance_date', dateStr);
 
+        if (schoolId.isNotEmpty) {
+          query = query.eq('school_id', schoolId);
+        }
+        if (targetStudentIds != null && targetStudentIds.isNotEmpty) {
+          query = query.inFilter('student_id', targetStudentIds);
+        }
+
+        final data = await query;
         return data.map((a) => _mapSupabaseToAttendanceModel(a)).toList();
       } catch (e) {
         debugPrint('[AttendanceService Supabase Error]: $e');

@@ -33,6 +33,8 @@ class TeacherModel {
   final String? joiningDate;
   final String? authUserId;
 
+  final UserRole role;
+
   const TeacherModel({
     required this.id,
     this.schoolId = '',
@@ -49,7 +51,25 @@ class TeacherModel {
     this.status = AccountStatus.active,
     this.joiningDate,
     this.authUserId,
+    this.role = UserRole.teacher,
   });
+
+  bool get isAdministrator => role.isAdministrator;
+  bool get isTeacher => role == UserRole.teacher;
+  bool get isStaff => role == UserRole.staff;
+
+  String get roleDisplayName {
+    switch (role) {
+      case UserRole.owner:
+      case UserRole.superAdmin:
+      case UserRole.schoolAdmin:
+        return 'Administrator';
+      case UserRole.staff:
+        return 'School Staff';
+      case UserRole.teacher:
+        return 'Teacher';
+    }
+  }
 
   String get className {
     if (assignedClass.trim().isNotEmpty) {
@@ -85,6 +105,7 @@ class TeacherModel {
     String? assignedSection,
     AccountStatus? status,
     List<String>? subjects,
+    UserRole? role,
   }) {
     return TeacherModel(
       id: id,
@@ -102,6 +123,7 @@ class TeacherModel {
       status: status ?? this.status,
       joiningDate: joiningDate,
       authUserId: authUserId,
+      role: role ?? this.role,
     );
   }
 
@@ -122,6 +144,7 @@ class TeacherModel {
       'status': status.name,
       'joiningDate': joiningDate,
       'authUserId': authUserId,
+      'role': role.name,
     };
   }
 
@@ -132,22 +155,31 @@ class TeacherModel {
       parsedStatus = AccountStatus.inactive;
     }
 
+    UserRole parsedRole = UserRole.teacher;
+    final roleRaw = (json['role']?.toString() ?? 'teacher').toLowerCase();
+    if (roleRaw.contains('admin') || roleRaw.contains('principal') || roleRaw.contains('owner')) {
+      parsedRole = UserRole.schoolAdmin;
+    } else if (roleRaw.contains('staff') || roleRaw.contains('clerk') || roleRaw.contains('accountant')) {
+      parsedRole = UserRole.staff;
+    }
+
     return TeacherModel(
       id: json['id']?.toString() ?? '',
       schoolId: json['schoolId']?.toString() ?? json['school_id']?.toString() ?? '',
-      employeeId: json['employeeId']?.toString() ?? 'EMP-0042',
-      name: json['name']?.toString() ?? 'Teacher',
+      employeeId: json['employeeId']?.toString() ?? json['employee_id']?.toString() ?? 'EMP-0042',
+      name: (json['name'] ?? json['full_name'] ?? 'Teacher').toString().trim(),
       email: json['email']?.toString() ?? '',
       subjects: json['subjects'] != null ? List<String>.from(json['subjects']) : const [],
-      assignedClass: json['assignedClass']?.toString() ?? '',
-      assignedSection: json['assignedSection']?.toString() ?? '',
+      assignedClass: json['assignedClass']?.toString() ?? json['assigned_class']?.toString() ?? '',
+      assignedSection: json['assignedSection']?.toString() ?? json['assigned_section']?.toString() ?? '',
       totalStudents: (json['totalStudents'] as num?)?.toInt() ?? 0,
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
-      designation: json['designation']?.toString() ?? 'Teacher',
+      designation: json['designation']?.toString() ?? (parsedRole.isAdministrator ? 'Administrator' : 'Teacher'),
       status: parsedStatus,
       joiningDate: json['joiningDate']?.toString(),
-      authUserId: json['authUserId']?.toString(),
+      authUserId: json['authUserId']?.toString() ?? json['auth_user_id']?.toString(),
+      role: parsedRole,
     );
   }
 }
@@ -418,6 +450,45 @@ class LeaveRequestModel {
       reason: reason,
       status: status ?? this.status,
     );
+  }
+
+  factory LeaveRequestModel.fromJson(Map<String, dynamic> json) {
+    final statusStr = json['status']?.toString().toLowerCase() ?? 'pending';
+    LeaveStatus status = LeaveStatus.pending;
+    if (statusStr == 'approved') {
+      status = LeaveStatus.approved;
+    } else if (statusStr == 'rejected') {
+      status = LeaveStatus.rejected;
+    }
+    return LeaveRequestModel(
+      id: json['id']?.toString() ?? '',
+      studentId: json['student_id']?.toString() ?? '',
+      studentName: json['student_name']?.toString() ?? 'Student',
+      className: json['class_name']?.toString() ?? '',
+      startDate: json['start_date'] != null
+          ? DateTime.tryParse(json['start_date'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      endDate: json['end_date'] != null
+          ? DateTime.tryParse(json['end_date'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      reason: json['reason']?.toString() ?? '',
+      status: status,
+    );
+  }
+
+  Map<String, dynamic> toJson({String? schoolId, String? academicYearId}) {
+    return {
+      if (id.isNotEmpty) 'id': id,
+      if (schoolId != null) 'school_id': schoolId,
+      if (academicYearId != null) 'academic_year_id': academicYearId,
+      'student_id': studentId,
+      'student_name': studentName,
+      'class_name': className,
+      'start_date': startDate.toIso8601String().substring(0, 10),
+      'end_date': endDate.toIso8601String().substring(0, 10),
+      'reason': reason,
+      'status': status.name.toUpperCase(),
+    };
   }
 }
 

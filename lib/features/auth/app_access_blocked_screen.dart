@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
@@ -31,6 +30,8 @@ class _AppAccessBlockedScreenState extends ConsumerState<AppAccessBlockedScreen>
 
   Future<void> _handleRetry() async {
     setState(() => _isRetrying = true);
+    ref.invalidate(appAccessStateProvider);
+    ref.invalidate(currentSchoolProvider);
     final service = ref.read(tenantAccessServiceProvider);
     final result = await service.validateCurrentSession();
 
@@ -48,14 +49,9 @@ class _AppAccessBlockedScreenState extends ConsumerState<AppAccessBlockedScreen>
   }
 
   Future<void> _handleSignOut() async {
-    try {
-      final client = Supabase.instance.client;
-      await client.auth.signOut();
-    } catch (_) {}
-    ref.invalidate(appAccessStateProvider);
-    ref.invalidate(authProvider);
+    await ref.read(authProvider.notifier).logout();
     if (mounted) {
-      context.go('/login/admin');
+      context.go('/role-selection');
     }
   }
 

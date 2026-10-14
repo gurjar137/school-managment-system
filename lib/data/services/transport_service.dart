@@ -65,11 +65,9 @@ class TransportService {
           return profile['school_id'].toString();
         }
       } catch (_) {}
-    }
-    if (SupabaseConfig.isConfigured) {
       throw const TenantResolutionException('Active school could not be resolved for current user. Please log in again.');
     }
-    return 'offline_mock_school';
+    return '6254bee9-151d-4332-8a1c-3994af7d2153';
   }
 
   Future<List<TransportRouteModel>> fetchRoutes({String? schoolId}) async {
@@ -84,7 +82,7 @@ class TransportService {
             .eq('school_id', activeSchoolId)
             .order('route_name', ascending: true);
 
-        if (data is List) {
+        if (data.isNotEmpty) {
           final liveList = data.map((d) => TransportRouteModel.fromJson(d)).toList();
           _cachedRoutes.clear();
           _cachedRoutes.addAll(liveList);

@@ -314,9 +314,11 @@ class MainNavigationScreen extends ConsumerWidget {
                 IconButton(
                   tooltip: 'Sign Out',
                   icon: const Icon(Icons.logout_rounded, size: 18, color: AppColors.coolGray),
-                  onPressed: () {
-                    ref.read(authProvider.notifier).logout();
-                    context.go('/role-selection');
+                  onPressed: () async {
+                    await ref.read(authProvider.notifier).logout();
+                    if (context.mounted) {
+                      context.go('/role-selection');
+                    }
                   },
                 ),
               ],

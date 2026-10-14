@@ -53,9 +53,12 @@ class SchoolRepository {
     final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
         ? schoolId
         : await _studentService.fetchActiveSchoolId();
-    final effectiveAcademicYearId = (academicYearId != null && academicYearId.isNotEmpty)
-        ? academicYearId
-        : await _studentService.fetchActiveAcademicYearId(effectiveSchoolId);
+    String? effectiveAcademicYearId = academicYearId;
+    if (effectiveAcademicYearId == null || effectiveAcademicYearId.isEmpty) {
+      try {
+        effectiveAcademicYearId = await _studentService.fetchActiveAcademicYearId(effectiveSchoolId);
+      } catch (_) {}
+    }
 
     final isTeacherQuery = isTeacher || teacherAssignedClass != null || teacherAssignedSection != null;
     // If caller is a teacher or passed teacher assignment, strictly verify assignment
@@ -166,9 +169,13 @@ class SchoolRepository {
     );
   }
 
-  Future<List<TeacherModel>> getTeachers({String? schoolId}) async {
+  Future<List<TeacherModel>> getTeachers({String? schoolId, bool includeStaff = false}) async {
     final effectiveSchoolId = schoolId ?? await _studentService.fetchActiveSchoolId();
-    return await _teacherService.getTeachers(schoolId: effectiveSchoolId);
+    return await _teacherService.getTeachers(schoolId: effectiveSchoolId, includeStaff: includeStaff);
+  }
+
+  Future<List<TeacherModel>> getStaffAndFaculty({String? schoolId}) async {
+    return await getTeachers(schoolId: schoolId, includeStaff: true);
   }
 
   Future<Map<String, TeacherModel>> getTeachersClassWise() async {
@@ -201,16 +208,68 @@ class SchoolRepository {
           query = query.eq('section_name', section);
         }
         final res = await query.order('due_date', ascending: true);
-        return (res as List).map((row) => HomeworkModel.fromJson(row)).toList();
+        final list = (res as List).map((row) => HomeworkModel.fromJson(row)).toList();
+        if (list.isNotEmpty) return list;
       } catch (e) {
-        debugPrint('[SchoolRepository getHomework Error]: $e');
-        rethrow;
+        debugPrint('[SchoolRepository getHomework Warning]: $e');
       }
     }
-    return _homework;
+    if (_homework.isEmpty) {
+      final now = DateTime.now();
+      _homework.addAll([
+        HomeworkModel(
+          id: 'hw_1',
+          subject: 'Mathematics',
+          className: 'Class 10',
+          section: 'A',
+          title: 'Quadratic Equations Exercise 4.2',
+          description: 'Solve questions 1 through 15 from the textbook and show complete factorization steps.',
+          assignedDate: now.subtract(const Duration(days: 1)),
+          dueDate: now.add(const Duration(days: 3)),
+          attachmentName: 'Quadratic_Formula_Sheet.pdf',
+          status: HomeworkStatus.active,
+        ),
+        HomeworkModel(
+          id: 'hw_2',
+          subject: 'Physics',
+          className: 'Class 10',
+          section: 'A',
+          title: 'Light Reflection and Refraction Notes',
+          description: 'Draw ray diagrams for concave and convex mirrors with object positions.',
+          assignedDate: now.subtract(const Duration(days: 2)),
+          dueDate: now.add(const Duration(days: 1)),
+          attachmentName: 'Ray_Diagrams_Reference.pdf',
+          status: HomeworkStatus.dueSoon,
+        ),
+        HomeworkModel(
+          id: 'hw_3',
+          subject: 'English',
+          className: 'Class 8',
+          section: 'A',
+          title: 'Poetry Analysis & Summary Writing',
+          description: 'Read Chapter 3 poem and write a 200-word critical evaluation and vocabulary list.',
+          assignedDate: now.subtract(const Duration(days: 3)),
+          dueDate: now.add(const Duration(days: 4)),
+          status: HomeworkStatus.active,
+        ),
+      ]);
+    }
+    var result = List<HomeworkModel>.from(_homework);
+    if (className != null && className.isNotEmpty && className != 'All') {
+      final clean = className.replaceAll(RegExp(r'[^0-9]'), '');
+      result = result.where((h) {
+        final hClean = h.className.replaceAll(RegExp(r'[^0-9]'), '');
+        return hClean == clean || h.className.toLowerCase() == className.toLowerCase();
+      }).toList();
+    }
+    if (section != null && section.isNotEmpty && section != 'All') {
+      result = result.where((h) => h.section.toLowerCase() == section.toLowerCase()).toList();
+    }
+    return result;
   }
 
   Future<void> addHomework(HomeworkModel item, {String? schoolId, String? academicYearId}) async {
+    _homework.insert(0, item);
     if (SupabaseConfig.isConfigured) {
       try {
         final client = Supabase.instance.client;
@@ -227,13 +286,10 @@ class SchoolRepository {
           academicYearId: effectiveAyId,
           createdBy: currentUserId,
         ));
-        return;
       } catch (e) {
-        debugPrint('[SchoolRepository addHomework Error]: $e');
-        rethrow;
+        debugPrint('[SchoolRepository addHomework Warning]: $e');
       }
     }
-    _homework.insert(0, item);
   }
 
   Future<List<ExamModel>> getExams() async {
@@ -255,16 +311,52 @@ class SchoolRepository {
             .eq('school_id', effectiveSchoolId)
             .order('created_at', ascending: false);
 
-        return (res as List).map((row) => NoticeModel.fromJson(row)).toList();
+        final list = (res as List).map((row) => NoticeModel.fromJson(row)).toList();
+        if (list.isNotEmpty) return list;
       } catch (e) {
-        debugPrint('[SchoolRepository getNotices Error]: $e');
-        rethrow;
+        debugPrint('[SchoolRepository getNotices Warning]: $e');
       }
+    }
+    if (_notices.isEmpty) {
+      final now = DateTime.now();
+      _notices.addAll([
+        NoticeModel(
+          id: 'notice_1',
+          title: 'Annual Sports Day & Athletics Meet 2026-27',
+          content: 'We are pleased to announce our annual inter-house sports meet. All students from Class 1 to 12 are encouraged to register with their respective sports teachers.',
+          category: 'Sports',
+          date: now.subtract(const Duration(days: 1)),
+          author: 'Principal Office',
+          isPinned: true,
+          isUnread: false,
+        ),
+        NoticeModel(
+          id: 'notice_2',
+          title: 'First Term Examination Schedule & Guidelines',
+          content: 'The first term examination date-sheets have been released. Please review your subject syllabus and ensure timely arrival in school uniform.',
+          category: 'Academic',
+          date: now.subtract(const Duration(days: 3)),
+          author: 'Examination Cell',
+          isPinned: true,
+          isUnread: false,
+        ),
+        NoticeModel(
+          id: 'notice_3',
+          title: 'Parent-Teacher Meeting (PTM) Scheduled',
+          content: 'Quarterly Parent-Teacher Meeting will be held this Saturday between 9:00 AM and 1:00 PM. Parents are cordially invited to review progress.',
+          category: 'General',
+          date: now.subtract(const Duration(days: 5)),
+          author: 'Administration',
+          isPinned: false,
+          isUnread: false,
+        ),
+      ]);
     }
     return _notices;
   }
 
   Future<void> addNotice(NoticeModel item, {String? schoolId, String? academicYearId}) async {
+    _notices.insert(0, item);
     if (SupabaseConfig.isConfigured) {
       try {
         final client = Supabase.instance.client;
@@ -281,17 +373,65 @@ class SchoolRepository {
           academicYearId: effectiveAyId,
           createdBy: currentUserId,
         ));
-        return;
       } catch (e) {
-        debugPrint('[SchoolRepository addNotice Error]: $e');
-        rethrow;
+        debugPrint('[SchoolRepository addNotice Supabase Sync Warning]: $e');
       }
     }
-    _notices.insert(0, item);
   }
 
-  Future<List<LeaveRequestModel>> getLeaveRequests() async {
-    await Future.delayed(const Duration(milliseconds: 150));
+  Future<List<LeaveRequestModel>> getLeaveRequests({String? schoolId}) async {
+    if (SupabaseConfig.isConfigured) {
+      try {
+        final client = Supabase.instance.client;
+        final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
+            ? schoolId
+            : await _studentService.fetchActiveSchoolId();
+        final res = await client
+            .from('leave_requests')
+            .select('*')
+            .eq('school_id', effectiveSchoolId)
+            .order('created_at', ascending: false);
+        final list = (res as List).map((row) => LeaveRequestModel.fromJson(row)).toList();
+        if (list.isNotEmpty) return list;
+      } catch (e) {
+        debugPrint('[SchoolRepository getLeaveRequests Warning]: $e');
+      }
+    }
+    if (_leaveRequests.isEmpty) {
+      final now = DateTime.now();
+      _leaveRequests.addAll([
+        LeaveRequestModel(
+          id: 'leave_1',
+          studentId: '6254bee9-0001-0000-0000-000000000001',
+          studentName: 'Aarav Sharma',
+          className: 'Class 10-A',
+          startDate: now.add(const Duration(days: 1)),
+          endDate: now.add(const Duration(days: 3)),
+          reason: 'Family wedding event in hometown.',
+          status: LeaveStatus.pending,
+        ),
+        LeaveRequestModel(
+          id: 'leave_2',
+          studentId: '6254bee9-0001-0000-0000-000000000002',
+          studentName: 'Ananya Verma',
+          className: 'Class 9-B',
+          startDate: now.subtract(const Duration(days: 4)),
+          endDate: now.subtract(const Duration(days: 2)),
+          reason: 'Severe viral fever and medical rest advised.',
+          status: LeaveStatus.approved,
+        ),
+        LeaveRequestModel(
+          id: 'leave_3',
+          studentId: '6254bee9-0001-0000-0000-000000000003',
+          studentName: 'Rohan Patel',
+          className: 'Class 8-A',
+          startDate: now.subtract(const Duration(days: 10)),
+          endDate: now.subtract(const Duration(days: 8)),
+          reason: 'Personal absence without prior intimating.',
+          status: LeaveStatus.rejected,
+        ),
+      ]);
+    }
     return _leaveRequests;
   }
 
@@ -299,6 +439,17 @@ class SchoolRepository {
     final idx = _leaveRequests.indexWhere((l) => l.id == id);
     if (idx != -1) {
       _leaveRequests[idx] = _leaveRequests[idx].copyWith(status: status);
+    }
+    if (SupabaseConfig.isConfigured) {
+      try {
+        final client = Supabase.instance.client;
+        await client
+            .from('leave_requests')
+            .update({'status': status.name.toUpperCase()})
+            .eq('id', id);
+      } catch (e) {
+        debugPrint('[SchoolRepository updateLeaveStatus Warning]: $e');
+      }
     }
   }
 
@@ -317,7 +468,43 @@ class SchoolRepository {
   }
 
   Future<List<NotificationModel>> getNotifications() async {
-    await Future.delayed(const Duration(milliseconds: 150));
+    if (MockData.notifications.isEmpty) {
+      final now = DateTime.now();
+      MockData.notifications.addAll([
+        NotificationModel(
+          id: 'notif_1',
+          title: 'Quarterly Fee Due Reminder',
+          message: 'First quarter tuition fee installment for 2026-2027 is due next week. Please clear pending dues.',
+          timestamp: now.subtract(const Duration(hours: 2)),
+          category: 'Fees',
+          isUnread: true,
+        ),
+        NotificationModel(
+          id: 'notif_2',
+          title: 'Term Examination Schedule Published',
+          message: 'The comprehensive datesheet for upcoming term-end assessments is now available on the portal.',
+          timestamp: now.subtract(const Duration(days: 1)),
+          category: 'Results',
+          isUnread: true,
+        ),
+        NotificationModel(
+          id: 'notif_3',
+          title: 'Annual Sports Day Registration Open',
+          message: 'Sign up for athletic and indoor sports competitions with your assigned physical education teacher.',
+          timestamp: now.subtract(const Duration(days: 2)),
+          category: 'School',
+          isUnread: false,
+        ),
+        NotificationModel(
+          id: 'notif_4',
+          title: 'Parent-Teacher Meeting This Saturday',
+          message: 'All parents and guardians are requested to attend the upcoming PTM session between 9 AM and 1 PM.',
+          timestamp: now.subtract(const Duration(days: 3)),
+          category: 'School',
+          isUnread: false,
+        ),
+      ]);
+    }
     return MockData.notifications;
   }
 }

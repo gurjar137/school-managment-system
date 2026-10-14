@@ -44,9 +44,12 @@ class MockCountingRepository extends SchoolRepository {
 
   @override
   Future<List<StudentModel>> getStudents({
+    String? schoolId,
     String? query,
     String? className,
     String? section,
+    String? academicYearId,
+    AccountStatus? status,
     bool isTeacher = false,
     String? teacherAssignedClass,
     String? teacherAssignedSection,

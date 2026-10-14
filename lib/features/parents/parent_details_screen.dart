@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/parent_model.dart';
 import '../../data/models/student_model.dart';
 import '../../data/models/user_model.dart';
@@ -48,6 +49,8 @@ class _ParentDetailsScreenState extends ConsumerState<ParentDetailsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/parents'),
         title: Text(_parent.name, style: AppTypography.titleLarge),
       ),
       body: ListView(

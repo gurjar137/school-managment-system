@@ -172,6 +172,7 @@ class AcademicYearOption {
 
 class SchoolClassModel {
   final String id; // UUID
+  final String? code; // Display code, e.g. "cls_1", "CLS-01"
   final String schoolId; // UUID
   final String academicYearId; // UUID
   final String name; // e.g. "Class 8", "Grade 10"
@@ -182,6 +183,7 @@ class SchoolClassModel {
 
   const SchoolClassModel({
     required this.id,
+    this.code,
     required this.schoolId,
     required this.academicYearId,
     required this.name,
@@ -191,16 +193,24 @@ class SchoolClassModel {
     required this.createdAt,
   });
 
+  bool get hasCanonicalUuid => RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(id);
+  String get displayCode => code ?? (displayOrder > 0 ? 'cls_$displayOrder' : id);
+
   SchoolClassModel copyWith({
+    String? id,
+    String? code,
+    String? schoolId,
+    String? academicYearId,
     String? name,
     int? displayOrder,
     int? sectionsCount,
     AccountStatus? status,
   }) {
     return SchoolClassModel(
-      id: id,
-      schoolId: schoolId,
-      academicYearId: academicYearId,
+      id: id ?? this.id,
+      code: code ?? this.code,
+      schoolId: schoolId ?? this.schoolId,
+      academicYearId: academicYearId ?? this.academicYearId,
       name: name ?? this.name,
       displayOrder: displayOrder ?? this.displayOrder,
       sectionsCount: sectionsCount ?? this.sectionsCount,
@@ -212,6 +222,7 @@ class SchoolClassModel {
 
 class SectionModel {
   final String id; // UUID
+  final String? code; // Display code, e.g. "sec_cls_1_A"
   final String schoolId; // UUID
   final String academicYearId; // UUID
   final String classId; // UUID
@@ -223,6 +234,7 @@ class SectionModel {
 
   const SectionModel({
     required this.id,
+    this.code,
     required this.schoolId,
     required this.academicYearId,
     required this.classId,
@@ -233,17 +245,26 @@ class SectionModel {
     required this.createdAt,
   });
 
+  bool get hasCanonicalUuid => RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(id);
+  String get displayCode => code ?? 'sec_${classId}_$name';
+
   SectionModel copyWith({
+    String? id,
+    String? code,
+    String? schoolId,
+    String? academicYearId,
+    String? classId,
     String? name,
     int? displayOrder,
     int? capacity,
     AccountStatus? status,
   }) {
     return SectionModel(
-      id: id,
-      schoolId: schoolId,
-      academicYearId: academicYearId,
-      classId: classId,
+      id: id ?? this.id,
+      code: code ?? this.code,
+      schoolId: schoolId ?? this.schoolId,
+      academicYearId: academicYearId ?? this.academicYearId,
+      classId: classId ?? this.classId,
       name: name ?? this.name,
       displayOrder: displayOrder ?? this.displayOrder,
       capacity: capacity ?? this.capacity,

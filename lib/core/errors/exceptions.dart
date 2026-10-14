@@ -25,3 +25,26 @@ class AcademicYearResolutionException implements Exception {
       ? 'AcademicYearResolutionException: $message (School ID: $schoolId)'
       : 'AcademicYearResolutionException: $message';
 }
+
+/// Thrown when a caller attempts to access or specify a school ID that differs
+/// from their authorized membership, or when dedicated school build configuration
+/// conflicts with the authenticated user's authorized school membership.
+class UnauthorizedTenantAccessException implements Exception {
+  final String message;
+  final String? requestedSchoolId;
+  final String? authorizedSchoolId;
+
+  const UnauthorizedTenantAccessException(
+    this.message, {
+    this.requestedSchoolId,
+    this.authorizedSchoolId,
+  });
+
+  @override
+  String toString() {
+    if (requestedSchoolId != null && authorizedSchoolId != null) {
+      return 'UnauthorizedTenantAccessException: $message (Requested: $requestedSchoolId, Authorized: $authorizedSchoolId)';
+    }
+    return 'UnauthorizedTenantAccessException: $message';
+  }
+}

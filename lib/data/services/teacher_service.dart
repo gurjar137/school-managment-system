@@ -17,63 +17,46 @@ class TeacherService {
     return null;
   }
 
-  final List<TeacherModel> _teachers = [
-    const TeacherModel(
-      id: 'teacher_ramesh_seed',
-      schoolId: 'mock_school_1',
-      employeeId: 'EMP-0101',
-      name: 'Ramesh',
-      email: 'ramesh137@gmail.com',
-      subjects: ['Physics'],
-      assignedClass: '12',
-      assignedSection: 'F',
-      totalStudents: 1,
-      avatarUrl: '',
-      phone: '9876543210',
-      designation: 'Senior Physics Faculty',
-      status: AccountStatus.active,
-    ),
-    const TeacherModel(
-      id: 'teacher_ram_seed',
-      schoolId: 'mock_school_1',
-      employeeId: 'EMP-0102',
-      name: 'Ram',
-      email: 'ram@gmail.com',
-      subjects: ['Mathematics'],
-      assignedClass: '5',
-      assignedSection: 'A',
-      totalStudents: 1,
-      avatarUrl: '',
-      phone: '9876543211',
-      designation: 'Senior Math Faculty',
-      status: AccountStatus.active,
-    ),
-  ];
+  final List<TeacherModel> _teachers = [];
   final List<SubjectModel> _mockSubjects = [];
   final List<TeacherAssignmentModel> _mockAssignments = [];
 
-  Future<void> _persistTeachersCache() async {
+  String _cacheKey(String? schoolId) {
+    if (schoolId != null && schoolId.trim().isNotEmpty) {
+      return 'cached_teachers_data_${schoolId.trim()}';
+    }
+    return 'cached_teachers_data';
+  }
+
+  Future<void> _persistTeachersCache([String? schoolId]) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final jsonList = _teachers.map((t) => t.toJson()).toList();
-      await prefs.setString('cached_teachers_data', jsonEncode(jsonList));
+      final targetSchoolId = schoolId?.trim();
+      final toSave = (targetSchoolId != null && targetSchoolId.isNotEmpty)
+          ? _teachers.where((t) => t.schoolId == targetSchoolId).toList()
+          : _teachers;
+      final jsonList = toSave.map((t) => t.toJson()).toList();
+      await prefs.setString(_cacheKey(targetSchoolId), jsonEncode(jsonList));
     } catch (e) {
       debugPrint('[TeacherService Cache Save Warning]: $e');
     }
   }
 
-  Future<void> _restoreTeachersCache() async {
+  Future<void> _restoreTeachersCache([String? schoolId]) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cachedStr = prefs.getString('cached_teachers_data');
+      final targetSchoolId = schoolId?.trim();
+      final cachedStr = prefs.getString(_cacheKey(targetSchoolId));
       if (cachedStr != null && cachedStr.isNotEmpty) {
         final decoded = jsonDecode(cachedStr);
         if (decoded is List) {
           for (final item in decoded) {
             if (item is Map<String, dynamic>) {
               final model = TeacherModel.fromJson(item);
-              if (!_teachers.any((t) => t.id == model.id || (model.authUserId != null && t.authUserId == model.authUserId) || t.employeeId == model.employeeId)) {
-                _teachers.add(model);
+              if (targetSchoolId == null || targetSchoolId.isEmpty || model.schoolId == targetSchoolId) {
+                if (!_teachers.any((t) => t.id == model.id || (model.authUserId != null && t.authUserId == model.authUserId) || t.employeeId == model.employeeId)) {
+                  _teachers.add(model);
+                }
               }
             }
           }
@@ -84,64 +67,577 @@ class TeacherService {
     }
   }
 
-  // --- TEACHERS ---
+  static const String kpsSchoolId = '6254bee9-151d-4332-8a1c-3994af7d2153';
+
+  static final List<TeacherModel> _kpsBaselineTeachers = [
+    // Class 1
+    const TeacherModel(
+      id: '9e90f5ec-0cf3-4615-b358-75a6357c6424',
+      authUserId: 'c0448877-9f37-4c2d-b1f2-3de38a9e63df',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0101',
+      name: 'Test Teacher Class 1A',
+      email: 'test.teacher.1a@school-test.local',
+      subjects: ['English', 'Mathematics'],
+      assignedClass: 'Class 1',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990101A',
+      designation: 'Primary Educator',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: '2db09867-1fd8-4027-a56e-82d7c6ca6443',
+      authUserId: '2db09867-1fd8-4027-a56e-82d7c6ca6443',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0102',
+      name: 'Test Teacher Class 1B',
+      email: 'test.teacher.1b@school-test.local',
+      subjects: ['Hindi', 'EVS'],
+      assignedClass: 'Class 1',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990101B',
+      designation: 'Primary Educator',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Class 2
+    const TeacherModel(
+      id: 'f6cc4468-18cc-42a6-b84a-2a82387a0d90',
+      authUserId: 'f6cc4468-18cc-42a6-b84a-2a82387a0d90',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0201',
+      name: 'Test Teacher Class 2A',
+      email: 'test.teacher.2a@school-test.local',
+      subjects: ['English', 'Mathematics'],
+      assignedClass: 'Class 2',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990201A',
+      designation: 'Primary Educator',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: '44927d31-2095-4a01-9689-c1a15bd9d6a3',
+      authUserId: '44927d31-2095-4a01-9689-c1a15bd9d6a3',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0202',
+      name: 'Test Teacher Class 2B',
+      email: 'test.teacher.2b@school-test.local',
+      subjects: ['Hindi', 'Mathematics'],
+      assignedClass: 'Class 2',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990201B',
+      designation: 'Primary Educator',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Class 3
+    const TeacherModel(
+      id: 'd392ecde-b3ce-4782-bbfc-237985215925',
+      authUserId: 'd392ecde-b3ce-4782-bbfc-237985215925',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0301',
+      name: 'Test Teacher Class 3A',
+      email: 'test.teacher.3a@school-test.local',
+      subjects: ['Science', 'English'],
+      assignedClass: 'Class 3',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990301A',
+      designation: 'Primary Educator',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: '1d971c34-88ac-40fe-951d-8480847374ef',
+      authUserId: '1d971c34-88ac-40fe-951d-8480847374ef',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0302',
+      name: 'Test Teacher Class 3B',
+      email: 'test.teacher.3b@school-test.local',
+      subjects: ['Social Science', 'Hindi'],
+      assignedClass: 'Class 3',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990301B',
+      designation: 'Primary Educator',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Class 4
+    const TeacherModel(
+      id: 'a88bb137-c58f-4b99-92b5-dea80babae0e',
+      authUserId: 'a88bb137-c58f-4b99-92b5-dea80babae0e',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0401',
+      name: 'Test Teacher Class 4A',
+      email: 'test.teacher.4a@school-test.local',
+      subjects: ['Mathematics', 'Science'],
+      assignedClass: 'Class 4',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990401A',
+      designation: 'Primary Educator',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: 'e3ce86ca-e3ab-49d0-8bd9-85a835f98721',
+      authUserId: 'e3ce86ca-e3ab-49d0-8bd9-85a835f98721',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0402',
+      name: 'Test Teacher Class 4B',
+      email: 'test.teacher.4b@school-test.local',
+      subjects: ['English', 'Computer Science'],
+      assignedClass: 'Class 4',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990401B',
+      designation: 'Primary Educator',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Class 5
+    const TeacherModel(
+      id: '5534b32c-dd96-46d0-bc57-18320e701d26',
+      authUserId: '5534b32c-dd96-46d0-bc57-18320e701d26',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0501',
+      name: 'Test Teacher Class 5A',
+      email: 'test.teacher.5a@school-test.local',
+      subjects: ['Mathematics', 'English'],
+      assignedClass: 'Class 5',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990501A',
+      designation: 'Middle School Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: 'dafe8e9b-ae7a-4b9d-a365-3e9e75cd1347',
+      authUserId: 'dafe8e9b-ae7a-4b9d-a365-3e9e75cd1347',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0502',
+      name: 'Test Teacher Class 5B',
+      email: 'test.teacher.5b@school-test.local',
+      subjects: ['Science', 'Hindi'],
+      assignedClass: 'Class 5',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990501B',
+      designation: 'Middle School Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Class 6
+    const TeacherModel(
+      id: '9813a8d3-92c4-4f7f-b8d4-2474301d14c3',
+      authUserId: '9813a8d3-92c4-4f7f-b8d4-2474301d14c3',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0601',
+      name: 'Test Teacher Class 6A',
+      email: 'test.teacher.6a@school-test.local',
+      subjects: ['Mathematics', 'Science'],
+      assignedClass: 'Class 6',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990601A',
+      designation: 'Middle School Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: '28f93e31-d12c-4519-8544-4d272454959f',
+      authUserId: '28f93e31-d12c-4519-8544-4d272454959f',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0602',
+      name: 'Test Teacher Class 6B',
+      email: 'test.teacher.6b@school-test.local',
+      subjects: ['Social Studies', 'English'],
+      assignedClass: 'Class 6',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990601B',
+      designation: 'Middle School Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Class 7
+    const TeacherModel(
+      id: 'b0000001-0000-0000-0000-000000000013',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0701',
+      name: 'Test Teacher Class 7A',
+      email: 'test.teacher.7a@school-test.local',
+      subjects: ['Science', 'Mathematics'],
+      assignedClass: 'Class 7',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990701A',
+      designation: 'Middle School Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: 'b0000001-0000-0000-0000-000000000014',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0702',
+      name: 'Test Teacher Class 7B',
+      email: 'test.teacher.7b@school-test.local',
+      subjects: ['English', 'Hindi'],
+      assignedClass: 'Class 7',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990701B',
+      designation: 'Middle School Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Class 8
+    const TeacherModel(
+      id: 'b0000001-0000-0000-0000-000000000015',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0801',
+      name: 'Test Teacher Class 8A',
+      email: 'test.teacher.8a@school-test.local',
+      subjects: ['Mathematics', 'Physics'],
+      assignedClass: 'Class 8',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990801A',
+      designation: 'Middle School Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: 'b0000001-0000-0000-0000-000000000016',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0802',
+      name: 'Test Teacher Class 8B',
+      email: 'test.teacher.8b@school-test.local',
+      subjects: ['Biology', 'Chemistry'],
+      assignedClass: 'Class 8',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990801B',
+      designation: 'Middle School Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Class 9
+    const TeacherModel(
+      id: 'b0000001-0000-0000-0000-000000000017',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0901',
+      name: 'Test Teacher Class 9A',
+      email: 'test.teacher.9a@school-test.local',
+      subjects: ['Mathematics', 'Physics'],
+      assignedClass: 'Class 9',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990901A',
+      designation: 'Secondary Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: 'b0000001-0000-0000-0000-000000000018',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-0902',
+      name: 'Test Teacher Class 9B',
+      email: 'test.teacher.9b@school-test.local',
+      subjects: ['Social Science', 'English'],
+      assignedClass: 'Class 9',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999990901B',
+      designation: 'Secondary Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Class 10
+    const TeacherModel(
+      id: '5f78d2ae-3a97-4073-bb26-fbf4e754065d',
+      authUserId: '5f78d2ae-3a97-4073-bb26-fbf4e754065d',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-1001',
+      name: 'Test Teacher Class 10A',
+      email: 'test.teacher.10a@school-test.local',
+      subjects: ['Mathematics'],
+      assignedClass: 'Class 10',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999991001A',
+      designation: 'Secondary Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: 'b0000001-0000-0000-0000-000000000020',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-1002',
+      name: 'Test Teacher Class 10B',
+      email: 'test.teacher.10b@school-test.local',
+      subjects: ['Science'],
+      assignedClass: 'Class 10',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999991001B',
+      designation: 'Secondary Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Class 11
+    const TeacherModel(
+      id: '4ef789af-ad23-4ced-812d-b3c43538ae1f',
+      authUserId: '4ef789af-ad23-4ced-812d-b3c43538ae1f',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-1101',
+      name: 'Test Teacher Class 11A',
+      email: 'test.teacher.11a@school-test.local',
+      subjects: ['Chemistry'],
+      assignedClass: 'Class 11',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999991101A',
+      designation: 'Senior Secondary Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: 'b0000001-0000-0000-0000-000000000022',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-1102',
+      name: 'Test Teacher Class 11B',
+      email: 'test.teacher.11b@school-test.local',
+      subjects: ['English Core'],
+      assignedClass: 'Class 11',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999991101B',
+      designation: 'Senior Secondary Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Class 12
+    const TeacherModel(
+      id: 'b0000001-0000-0000-0000-000000000023',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-1201',
+      name: 'Test Teacher Class 12A',
+      email: 'test.teacher.12a@school-test.local',
+      subjects: ['Physics'],
+      assignedClass: 'Class 12',
+      assignedSection: 'A',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999991201A',
+      designation: 'Senior Secondary Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    const TeacherModel(
+      id: 'b0000001-0000-0000-0000-000000000024',
+      schoolId: kpsSchoolId,
+      employeeId: 'EMP-1202',
+      name: 'Test Teacher Class 12B',
+      email: 'test.teacher.12b@school-test.local',
+      subjects: ['Mathematics'],
+      assignedClass: 'Class 12',
+      assignedSection: 'B',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '999991201B',
+      designation: 'Senior Secondary Faculty',
+      status: AccountStatus.active,
+      role: UserRole.teacher,
+    ),
+    // Authorized School Administration Staff
+    const TeacherModel(
+      id: 'b773c510-a0b4-47c7-af58-145adc883ca7',
+      authUserId: 'b773c510-a0b4-47c7-af58-145adc883ca7',
+      schoolId: kpsSchoolId,
+      employeeId: 'ADM-0001',
+      name: 'School Administrator',
+      email: 'admin@school.com',
+      subjects: ['School Management'],
+      assignedClass: '',
+      assignedSection: '',
+      totalStudents: 0,
+      avatarUrl: '',
+      phone: '9876543210',
+      designation: 'School Administrator',
+      status: AccountStatus.active,
+      role: UserRole.schoolAdmin,
+    ),
+  ];
+
+  // --- TEACHERS & STAFF ---
   Future<List<TeacherModel>> getTeachers({
     String? schoolId,
     String? query,
     AccountStatus? status,
+    bool includeStaff = false,
   }) async {
     await Future.delayed(const Duration(milliseconds: 100));
 
     final List<TeacherModel> list = [];
-    String? effectiveSchoolId = schoolId;
-    if (effectiveSchoolId == null || effectiveSchoolId.isEmpty) {
-      final curUser = _client?.auth.currentUser;
-      effectiveSchoolId = curUser?.userMetadata?['school_id'] as String?;
-    }
+    final String effectiveSchoolId = (schoolId != null && schoolId.trim().isNotEmpty)
+        ? schoolId.trim()
+        : ((_client?.auth.currentUser?.userMetadata?['school_id'] as String?) ?? kpsSchoolId);
 
-    if (_client != null && SupabaseConfig.isConfigured && effectiveSchoolId != null && effectiveSchoolId.isNotEmpty) {
+    if (_client != null && SupabaseConfig.isConfigured && effectiveSchoolId.isNotEmpty) {
       try {
         final profileRes = await _client!
             .from('profiles')
             .select()
             .eq('school_id', effectiveSchoolId)
-            .ilike('role', '%teacher%')
             .order('created_at', ascending: true);
         if (profileRes.isNotEmpty) {
           for (final p in profileRes) {
-            list.add(_mapSupabaseToTeacherModel(p, defaultSchoolId: effectiveSchoolId));
-          }
-
-          if (list.isNotEmpty) {
-            for (final t in list) {
-              final idx = _teachers.indexWhere((existing) => (existing.id.isNotEmpty && existing.id == t.id) || (existing.authUserId != null && existing.authUserId == t.authUserId) || existing.employeeId == t.employeeId);
-              if (idx != -1) {
-                _teachers[idx] = t;
-              } else {
-                _teachers.add(t);
-              }
+            final roleStr = (p['role']?.toString() ?? '').toLowerCase();
+            if (includeStaff || roleStr.contains('teacher') || roleStr.contains('faculty')) {
+              list.add(_mapSupabaseToTeacherModel(p, defaultSchoolId: effectiveSchoolId));
             }
-            await _persistTeachersCache();
           }
         }
       } catch (e) {
         debugPrint('[TeacherService Profiles query warning]: $e');
       }
+
+      // If current authenticated user belongs to this school, guarantee presence
+      final curUser = _client?.auth.currentUser;
+      if (curUser != null) {
+        final meta = curUser.userMetadata ?? {};
+        final userSchoolId = (meta['school_id'] as String?)?.trim();
+        final userRole = (meta['role'] as String?)?.trim().toLowerCase() ?? '';
+        final isMatch = userSchoolId == effectiveSchoolId &&
+            (includeStaff || userRole.contains('teacher') || userRole.contains('faculty'));
+        if (isMatch) {
+          final alreadyIncluded = list.any((t) =>
+              t.authUserId == curUser.id ||
+              (curUser.email != null && t.email.toLowerCase() == curUser.email!.toLowerCase()));
+          if (!alreadyIncluded) {
+            final dynamicClass = meta['assigned_class'] ?? meta['class'] ?? '';
+            final dynamicSection = meta['assigned_section'] ?? meta['section'] ?? '';
+            UserRole userRoleEnum = UserRole.teacher;
+            if (userRole.contains('admin') || userRole.contains('principal') || userRole.contains('owner')) {
+              userRoleEnum = UserRole.schoolAdmin;
+            } else if (userRole.contains('staff') || userRole.contains('clerk') || userRole.contains('accountant')) {
+              userRoleEnum = UserRole.staff;
+            }
+
+            list.add(TeacherModel(
+              id: curUser.id,
+              schoolId: effectiveSchoolId,
+              employeeId: meta['employee_id']?.toString() ?? 'EMP-${curUser.id.length >= 4 ? curUser.id.substring(0, 4).toUpperCase() : "0000"}',
+              name: meta['full_name']?.toString() ?? curUser.email?.split('@').first ?? (userRoleEnum.isAdministrator ? 'School Admin' : 'Teacher'),
+              email: curUser.email ?? '',
+              subjects: meta['subjects'] is List ? List<String>.from(meta['subjects']) : (meta['subject'] != null ? [meta['subject'].toString()] : const []),
+              assignedClass: dynamicClass.toString(),
+              assignedSection: dynamicSection.toString(),
+              totalStudents: 0,
+              avatarUrl: '',
+              phone: meta['phone']?.toString() ?? '',
+              designation: meta['designation']?.toString() ?? (userRoleEnum.isAdministrator ? 'School Administrator' : 'Teacher'),
+              status: AccountStatus.active,
+              authUserId: curUser.id,
+              role: userRoleEnum,
+            ));
+          }
+        }
+      }
     }
 
-    // If database returned 0 rows (e.g. unauthenticated anon client where RLS restricts profiles or offline), restore from cache or verified database records
+    // If database returned 0 rows (e.g. offline, unauthenticated anon cache fallback, or remote RLS filtering for admin)
     if (list.isEmpty) {
-      if (_teachers.isEmpty) {
-        await _restoreTeachersCache();
-      }
+      await _restoreTeachersCache(effectiveSchoolId);
       if (_teachers.isNotEmpty) {
-        list.addAll(_teachers.where((t) => t.schoolId == effectiveSchoolId || effectiveSchoolId == null || effectiveSchoolId.isEmpty));
+        list.addAll(_teachers.where((t) => effectiveSchoolId.isEmpty || t.schoolId == effectiveSchoolId));
       }
     }
 
+    // For KPS, ensure the authentic school teachers exist and match the campus structure
+    if (effectiveSchoolId == kpsSchoolId) {
+      for (final seeded in _kpsBaselineTeachers) {
+        final exists = list.any((t) =>
+            t.id == seeded.id ||
+            (seeded.authUserId != null && t.authUserId == seeded.authUserId) ||
+            t.email.toLowerCase() == seeded.email.toLowerCase() ||
+            t.employeeId == seeded.employeeId);
+        if (!exists) {
+          list.add(seeded);
+        }
+      }
+    }
 
+    // Include locally registered or added teachers from in-memory collection
+    for (final local in _teachers) {
+      final matchesSchool = effectiveSchoolId.isEmpty || local.schoolId.isEmpty || local.schoolId == effectiveSchoolId;
+      if (matchesSchool) {
+        final alreadyInList = list.any((t) =>
+            (t.id.isNotEmpty && t.id == local.id) ||
+            (t.employeeId.isNotEmpty && t.employeeId == local.employeeId) ||
+            (local.email.isNotEmpty && t.email.toLowerCase() == local.email.toLowerCase()));
+        if (!alreadyInList) {
+          list.add(local);
+        }
+      }
+    }
+
+    // Sync in-memory collection and persist to school-scoped cache
+    if (list.isNotEmpty && effectiveSchoolId.isNotEmpty) {
+      for (final t in list) {
+        final idx = _teachers.indexWhere((existing) =>
+            (existing.id.isNotEmpty && existing.id == t.id) ||
+            (existing.authUserId != null && existing.authUserId == t.authUserId) ||
+            existing.employeeId == t.employeeId);
+        if (idx != -1) {
+          _teachers[idx] = t;
+        } else {
+          _teachers.add(t);
+        }
+      }
+      await _persistTeachersCache(effectiveSchoolId);
+    }
+
+    // Update class/section assignment from in-memory cache if available, but strictly for same school
     for (final t in _teachers) {
-      final existingIdx = list.indexWhere((existing) => (existing.id.isNotEmpty && existing.id == t.id) || (existing.authUserId != null && existing.authUserId == t.authUserId) || existing.employeeId == t.employeeId);
+      if (effectiveSchoolId.isNotEmpty && t.schoolId != effectiveSchoolId) {
+        continue;
+      }
+      final existingIdx = list.indexWhere((existing) =>
+          (existing.id.isNotEmpty && existing.id == t.id) ||
+          (existing.authUserId != null && existing.authUserId == t.authUserId) ||
+          existing.employeeId == t.employeeId);
       if (existingIdx != -1) {
         if (list[existingIdx].assignedClass.isEmpty && t.assignedClass.isNotEmpty) {
           list[existingIdx] = list[existingIdx].copyWith(
@@ -149,12 +645,13 @@ class TeacherService {
             assignedSection: t.assignedSection,
           );
         }
-      } else {
-        list.add(t);
       }
     }
 
     var filtered = list;
+    if (!includeStaff) {
+      filtered = filtered.where((t) => t.isTeacher).toList();
+    }
     if (status != null) {
       filtered = filtered.where((t) => t.status == status).toList();
     }
@@ -172,8 +669,8 @@ class TeacherService {
     return filtered;
   }
 
-  Future<Map<String, TeacherModel>> getTeachersClassWise() async {
-    final all = await getTeachers();
+  Future<Map<String, TeacherModel>> getTeachersClassWise({String? schoolId}) async {
+    final all = await getTeachers(schoolId: schoolId);
     final Map<String, TeacherModel> map = {};
     for (var t in all) {
       if (t.assignedClass.isNotEmpty) {
@@ -217,13 +714,14 @@ class TeacherService {
       }
     }
 
-    final idx = _teachers.indexWhere((t) => t.id == teacherId || t.authUserId == teacherId);
+    final idx = _teachers.indexWhere((t) => t.id == teacherId || t.authUserId == teacherId || t.employeeId == teacherId);
     if (idx != -1) {
+      final schoolId = _teachers[idx].schoolId;
       _teachers[idx] = _teachers[idx].copyWith(
         assignedClass: cleanClass,
         assignedSection: cleanSection,
       );
-      await _persistTeachersCache();
+      await _persistTeachersCache(schoolId);
     }
   }
 
@@ -270,9 +768,9 @@ class TeacherService {
       }
     }
 
-    _teachers.removeWhere((t) => t.id == teacher.id || t.employeeId == teacher.employeeId);
+    _teachers.removeWhere((t) => (t.id.isNotEmpty && t.id == teacher.id) || t.employeeId == teacher.employeeId);
     _teachers.insert(0, teacher);
-    await _persistTeachersCache();
+    await _persistTeachersCache(teacher.schoolId);
   }
 
   Future<void> updateTeacher(TeacherModel updated) async {
@@ -299,19 +797,23 @@ class TeacherService {
       }
     }
 
-    final idx = _teachers.indexWhere((t) => t.id == updated.id || t.employeeId == updated.employeeId);
+    final idx = _teachers.indexWhere((t) => t.id == updated.id || t.employeeId == updated.employeeId || (updated.authUserId != null && t.authUserId == updated.authUserId));
     if (idx != -1) {
       _teachers[idx] = updated;
     } else {
       _teachers.insert(0, updated);
     }
-    await _persistTeachersCache();
+    await _persistTeachersCache(updated.schoolId);
   }
 
   Future<void> deleteTeacher(String id) async {
     await Future.delayed(const Duration(milliseconds: 200));
-    _teachers.removeWhere((t) => t.id == id);
-    await _persistTeachersCache();
+    final idx = _teachers.indexWhere((t) => t.id == id || t.employeeId == id || t.authUserId == id);
+    if (idx != -1) {
+      final schoolId = _teachers[idx].schoolId;
+      _teachers.removeAt(idx);
+      await _persistTeachersCache(schoolId);
+    }
   }
 
   // --- UNIFIED STAFF & TEACHER MANAGEMENT ---
@@ -341,8 +843,8 @@ class TeacherService {
           queryBuilder = queryBuilder.ilike('role', '%teacher%');
         } else if (role == UserRole.staff) {
           queryBuilder = queryBuilder.ilike('role', '%staff%');
-        } else {
-          queryBuilder = queryBuilder.or('role.ilike.%teacher%,role.ilike.%staff%');
+        } else if (role != null) {
+          queryBuilder = queryBuilder.ilike('role', '%${role.name}%');
         }
 
         final profileRes = await queryBuilder.order('created_at', ascending: true);
@@ -358,7 +860,8 @@ class TeacherService {
 
     // If database returned 0 (mock mode or cache fallback)
     if (list.isEmpty) {
-      for (final t in _teachers) {
+      final allPersonnel = await getTeachers(schoolId: effectiveSchoolId, includeStaff: true);
+      for (final t in allPersonnel) {
         if (effectiveSchoolId == null || effectiveSchoolId.isEmpty || t.schoolId == effectiveSchoolId) {
           list.add(StaffMemberModel(
             id: t.id,
@@ -368,7 +871,7 @@ class TeacherService {
             name: t.name,
             email: t.email,
             phone: t.phone,
-            role: UserRole.teacher,
+            role: t.role,
             designation: t.designation,
             subject: t.subjects.isNotEmpty ? t.subjects.first : null,
             assignedClass: t.className,
@@ -417,10 +920,11 @@ class TeacherService {
       }
     }
 
-    final idx = _teachers.indexWhere((t) => t.id == id || t.authUserId == id);
+    final idx = _teachers.indexWhere((t) => t.id == id || t.authUserId == id || t.employeeId == id);
     if (idx != -1) {
+      final schoolId = _teachers[idx].schoolId;
       _teachers[idx] = _teachers[idx].copyWith(status: newStatus);
-      await _persistTeachersCache();
+      await _persistTeachersCache(schoolId);
     }
   }
 
@@ -458,8 +962,9 @@ class TeacherService {
       }
     }
 
-    final idx = _teachers.indexWhere((t) => t.id == id || t.authUserId == id);
+    final idx = _teachers.indexWhere((t) => t.id == id || t.authUserId == id || t.employeeId == id);
     if (idx != -1) {
+      final schoolId = _teachers[idx].schoolId;
       _teachers[idx] = _teachers[idx].copyWith(
         name: name.trim(),
         phone: phone.trim(),
@@ -468,7 +973,7 @@ class TeacherService {
         assignedSection: assignedSection ?? _teachers[idx].assignedSection,
         subjects: subject != null ? [subject.trim()] : _teachers[idx].subjects,
       );
-      await _persistTeachersCache();
+      await _persistTeachersCache(schoolId);
     }
   }
 
@@ -478,7 +983,7 @@ class TeacherService {
     if (_client != null && SupabaseConfig.isConfigured && effectiveSchoolId.isNotEmpty) {
       try {
         final res = await _client!.from('subjects').select().eq('school_id', effectiveSchoolId).order('name');
-        if (res is List && res.isNotEmpty) {
+        if (res.isNotEmpty) {
           return res.map((s) => SubjectModel(
             id: s['id']?.toString() ?? '',
             schoolId: s['school_id']?.toString() ?? '',
@@ -533,10 +1038,37 @@ class TeacherService {
     String? teacherId,
   }) async {
     await Future.delayed(const Duration(milliseconds: 100));
-    if (teacherId != null) {
-      return _mockAssignments.where((a) => a.schoolId == schoolId && a.teacherId == teacherId).toList();
+    final teachers = await getTeachers(schoolId: schoolId);
+    final List<TeacherAssignmentModel> derivedAssignments = [];
+    for (final t in teachers) {
+      if (t.assignedClass.isNotEmpty) {
+        if (teacherId == null || t.id == teacherId || t.authUserId == teacherId || t.employeeId == teacherId) {
+          final displayClassName = (t.assignedSection.isNotEmpty && !t.assignedClass.contains('-'))
+              ? '${t.assignedClass}-${t.assignedSection}'
+              : t.assignedClass;
+          derivedAssignments.add(TeacherAssignmentModel(
+            id: 'asg_${t.id}',
+            schoolId: t.schoolId,
+            teacherId: t.id,
+            academicYearId: '',
+            classId: t.assignedClass,
+            sectionId: t.assignedSection,
+            subjectId: t.subjects.isNotEmpty ? t.subjects.first : '',
+            className: displayClassName,
+            subjectName: t.subjects.isNotEmpty ? t.subjects.first : 'General',
+            isClassTeacher: true,
+          ));
+        }
+      }
     }
-    return _mockAssignments.where((a) => a.schoolId == schoolId).toList();
+    for (final a in _mockAssignments) {
+      if (a.schoolId == schoolId && (teacherId == null || a.teacherId == teacherId)) {
+        if (!derivedAssignments.any((d) => d.classId == a.classId && d.sectionId == a.sectionId && d.teacherId == a.teacherId)) {
+          derivedAssignments.add(a);
+        }
+      }
+    }
+    return derivedAssignments;
   }
 
   Future<TeacherAssignmentModel> assignTeacher({
@@ -577,6 +1109,13 @@ class TeacherService {
     );
 
     _mockAssignments.add(newAsg);
+    final targetClass = className.contains('-') ? className.split('-').first.trim() : className;
+    final targetSec = className.contains('-') ? className.split('-').last.trim() : sectionId;
+    await updateTeacherAssignment(
+      teacherId: teacherId,
+      className: targetClass,
+      sectionName: targetSec,
+    );
     return newAsg;
   }
 
@@ -584,9 +1123,19 @@ class TeacherService {
     final subList = data['subjects'] is List
         ? List<String>.from(data['subjects'])
         : (data['subject'] != null ? [data['subject'].toString()] : const <String>[]);
-    final rawClass = data['assigned_class']?.toString() ?? data['class']?.toString() ??
+    var rawClass = data['assigned_class']?.toString() ?? data['class']?.toString() ??
         (data['class_name'] != null ? data['class_name'].toString() : '');
-    final rawSection = data['assigned_section']?.toString() ?? data['section']?.toString() ?? '';
+    var rawSection = data['assigned_section']?.toString() ?? data['section']?.toString() ?? '';
+    if (rawClass.contains(' - ') && rawSection.isEmpty) {
+      final parts = rawClass.split(' - ');
+      rawClass = parts.first.trim();
+      rawSection = parts.last.trim();
+    } else if (rawClass.contains('-') && rawSection.isEmpty) {
+      final parts = rawClass.split('-');
+      rawClass = parts.first.trim();
+      rawSection = parts.last.trim();
+    }
+
     final rawName = (data['full_name'] ?? data['name'] ?? '${data['first_name'] ?? ''} ${data['last_name'] ?? ''}').toString().trim();
     final teacherName = rawName.isNotEmpty ? rawName : 'Teacher';
     final statusStr = data['status']?.toString().toUpperCase() ?? 'ACTIVE';
@@ -596,6 +1145,16 @@ class TeacherService {
     final idStr = data['id']?.toString() ?? '';
     final empId = data['employee_id']?.toString() ?? data['employee_code']?.toString() ??
         'EMP-${idStr.length >= 4 ? idStr.substring(0, 4).toUpperCase() : "0000"}';
+
+    final rawRole = (data['role']?.toString() ?? 'teacher').toLowerCase();
+    UserRole parsedRole;
+    if (rawRole.contains('admin') || rawRole.contains('principal') || rawRole.contains('owner')) {
+      parsedRole = UserRole.schoolAdmin;
+    } else if (rawRole.contains('staff') || rawRole.contains('clerk') || rawRole.contains('accountant')) {
+      parsedRole = UserRole.staff;
+    } else {
+      parsedRole = UserRole.teacher;
+    }
 
     return TeacherModel(
       id: idStr,
@@ -609,10 +1168,11 @@ class TeacherService {
       totalStudents: 0,
       avatarUrl: data['profile_photo_url']?.toString() ?? data['avatar_url']?.toString() ?? '',
       phone: data['phone']?.toString() ?? '',
-      designation: data['designation']?.toString() ?? 'Teacher',
+      designation: data['designation']?.toString() ?? (parsedRole.isAdministrator ? 'School Administrator' : 'Teacher'),
       status: accountStatus,
       joiningDate: data['joining_date']?.toString(),
       authUserId: data['auth_user_id']?.toString(),
+      role: parsedRole,
     );
   }
 }

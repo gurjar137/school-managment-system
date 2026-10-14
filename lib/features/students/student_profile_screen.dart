@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/student_model.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/parent_model.dart';
@@ -116,7 +117,10 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> wit
 
     if (_student == null) {
       return Scaffold(
-        appBar: AppBar(),
+        appBar: AppBar(
+          leadingWidth: AppBackButton.leadingWidth,
+          leading: const AppBackButton(fallbackPath: '/students'),
+        ),
         body: const EmptyStateWidget(
           icon: Icons.person_off_rounded,
           title: 'Student Profile Not Found',
@@ -150,6 +154,8 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> wit
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/students'),
         title: Text('Student File', style: AppTypography.titleLarge),
         actions: [
           IconButton(

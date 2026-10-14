@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/app_back_button.dart';
 
 class SchoolOnboardingScreen extends ConsumerStatefulWidget {
   const SchoolOnboardingScreen({super.key});
@@ -15,6 +16,7 @@ class SchoolOnboardingScreen extends ConsumerStatefulWidget {
 class _SchoolOnboardingScreenState extends ConsumerState<SchoolOnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _schoolNameCtrl = TextEditingController();
+  final _schoolCodeCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _adminNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
@@ -25,6 +27,7 @@ class _SchoolOnboardingScreenState extends ConsumerState<SchoolOnboardingScreen>
   @override
   void dispose() {
     _schoolNameCtrl.dispose();
+    _schoolCodeCtrl.dispose();
     _addressCtrl.dispose();
     _adminNameCtrl.dispose();
     _emailCtrl.dispose();
@@ -42,10 +45,11 @@ class _SchoolOnboardingScreenState extends ConsumerState<SchoolOnboardingScreen>
     try {
       final authService = ref.read(authServiceProvider);
       final newOwner = await authService.registerPrimarySchoolAdmin(
-        schoolName: _schoolNameCtrl.text,
-        address: _addressCtrl.text,
-        adminName: _adminNameCtrl.text,
-        email: _emailCtrl.text,
+        schoolName: _schoolNameCtrl.text.trim(),
+        schoolCode: _schoolCodeCtrl.text.trim().isNotEmpty ? _schoolCodeCtrl.text.trim() : null,
+        address: _addressCtrl.text.trim(),
+        adminName: _adminNameCtrl.text.trim(),
+        email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
       );
 
@@ -55,7 +59,7 @@ class _SchoolOnboardingScreenState extends ConsumerState<SchoolOnboardingScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppColors.mutedGreen,
-            content: Text('School "${_schoolNameCtrl.text}" created! Registered as Primary Admin.'),
+            content: Text('School "${_schoolNameCtrl.text}" onboarded! Registered as Primary Admin.'),
           ),
         );
         context.go('/home');
@@ -74,6 +78,19 @@ class _SchoolOnboardingScreenState extends ConsumerState<SchoolOnboardingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: AppBackButton(
+          fallbackPath: '/role-selection',
+          onBeforeBack: () async {
+            final isDirty = _schoolNameCtrl.text.isNotEmpty ||
+                _adminNameCtrl.text.isNotEmpty ||
+                _emailCtrl.text.isNotEmpty;
+            if (isDirty) {
+              return await showDiscardChangesDialog(context);
+            }
+            return true;
+          },
+        ),
         title: Text('Campus Setup & Primary Admin', style: AppTypography.titleLarge),
       ),
       body: SafeArea(
@@ -101,6 +118,15 @@ class _SchoolOnboardingScreenState extends ConsumerState<SchoolOnboardingScreen>
                   controller: _schoolNameCtrl,
                   decoration: const InputDecoration(labelText: 'Official School Name'),
                   validator: (v) => v == null || v.trim().isEmpty ? 'Enter school name' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _schoolCodeCtrl,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'School Code (Optional)',
+                    hintText: 'e.g. KPS (if linking to an existing campus)',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -152,6 +178,15 @@ class _SchoolOnboardingScreenState extends ConsumerState<SchoolOnboardingScreen>
                     child: _isLoading
                         ? const CircularProgressIndicator(color: AppColors.pureWhite)
                         : const Text('Complete Onboarding & Claim School'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () => context.go('/login/admin'),
+                    icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                    label: const Text('Already have an admin account? Sign In'),
                   ),
                 ),
               ],

@@ -8,6 +8,7 @@ import '../../core/config/supabase_config.dart';
 import '../../core/errors/exceptions.dart';
 import '../../core/utils/teacher_assignment_parser.dart';
 import 'access_service.dart';
+import 'tenant_resolver.dart';
 
 class StudentService {
   SupabaseClient? get _client {
@@ -21,28 +22,42 @@ class StudentService {
 
   final List<StudentModel> _students = [];
 
-  Future<void> _persistStudentsCache() async {
+  String _cacheKey(String? schoolId) {
+    if (schoolId != null && schoolId.trim().isNotEmpty) {
+      return 'cached_students_data_${schoolId.trim()}';
+    }
+    return 'cached_students_data';
+  }
+
+  Future<void> _persistStudentsCache([String? schoolId]) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final jsonList = _students.map((s) => s.toJson()).toList();
-      await prefs.setString('cached_students_data', jsonEncode(jsonList));
+      final targetSchoolId = schoolId?.trim();
+      final toSave = (targetSchoolId != null && targetSchoolId.isNotEmpty)
+          ? _students.where((s) => s.schoolId == targetSchoolId).toList()
+          : _students;
+      final jsonList = toSave.map((s) => s.toJson()).toList();
+      await prefs.setString(_cacheKey(targetSchoolId), jsonEncode(jsonList));
     } catch (e) {
       debugPrint('[StudentService Cache Save Warning]: $e');
     }
   }
 
-  Future<void> _restoreStudentsCache() async {
+  Future<void> _restoreStudentsCache([String? schoolId]) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cachedStr = prefs.getString('cached_students_data');
+      final targetSchoolId = schoolId?.trim();
+      final cachedStr = prefs.getString(_cacheKey(targetSchoolId));
       if (cachedStr != null && cachedStr.isNotEmpty) {
         final decoded = jsonDecode(cachedStr);
         if (decoded is List) {
           for (final item in decoded) {
             if (item is Map<String, dynamic>) {
               final model = StudentModel.fromJson(item);
-              if (!_students.any((s) => s.id == model.id || (model.admissionNumber.isNotEmpty && s.admissionNumber == model.admissionNumber))) {
-                _students.add(model);
+              if (targetSchoolId == null || targetSchoolId.isEmpty || model.schoolId == targetSchoolId) {
+                if (!_students.any((s) => s.id == model.id || (model.admissionNumber.isNotEmpty && s.admissionNumber == model.admissionNumber))) {
+                  _students.add(model);
+                }
               }
             }
           }
@@ -322,9 +337,8 @@ class StudentService {
             .range(offset, offset + limit - 1);
 
         final List<StudentModel> list = [];
-        if (data is List) {
-          for (final row in data) {
-            final model = _mapSupabaseToStudentModel(row);
+        for (final row in data) {
+          final model = _mapSupabaseToStudentModel(row);
             list.add(model);
             final existingIdx = _students.indexWhere((s) => s.id == model.id || (model.admissionNumber.isNotEmpty && s.admissionNumber == model.admissionNumber));
             if (existingIdx != -1) {
@@ -334,7 +348,6 @@ class StudentService {
             }
           }
           await _persistStudentsCache();
-        }
         return list;
       } catch (e) {
         debugPrint('[StudentService getAllStudents Supabase Error]: $e');
@@ -411,7 +424,7 @@ class StudentService {
   Future<Map<String, dynamic>?> fetchActiveAcademicYearRecord(String schoolId) async {
     if (_client == null || !SupabaseConfig.isConfigured) {
       return {
-        'id': 'mock_ay_id',
+        'id': '47d1569b-e032-44a7-891f-b21f5458f55b',
         'name': '2026-2027',
         'school_id': schoolId,
       };
@@ -425,7 +438,7 @@ class StudentService {
           .select('id, name, school_id, start_date, end_date')
           .eq('school_id', schoolId);
 
-      if (allYears is List && allYears.isNotEmpty) {
+      if (allYears.isNotEmpty) {
         final matching = allYears.where((ay) {
           final s = ay['start_date'] as String?;
           final e = ay['end_date'] as String?;
@@ -444,7 +457,7 @@ class StudentService {
       debugPrint('[StudentService fetchActiveAcademicYearRecord Warning]: $e');
     }
 
-    throw AcademicYearResolutionException('No active academic year is configured for school $schoolId', schoolId: schoolId);
+    return null;
   }
 
   Future<String?> fetchActiveAcademicYearId(String schoolId) async {
@@ -453,31 +466,10 @@ class StudentService {
   }
 
   Future<String> fetchActiveSchoolId({String? fallback}) async {
-    if (fallback != null && fallback.isNotEmpty) {
-      return fallback;
-    }
-    if (_client != null && SupabaseConfig.isConfigured) {
-      final user = _client!.auth.currentUser;
-      if (user != null) {
-        try {
-          final prof = await _client!.from('profiles').select('school_id').eq('auth_user_id', user.id).maybeSingle();
-          if (prof != null && prof['school_id'] != null && prof['school_id'].toString().isNotEmpty) {
-            final schId = prof['school_id'] as String;
-            debugPrint('[StudentService fetchActiveSchoolId Debug]: Found profile school_id: $schId');
-            return schId;
-          }
-          final metaSchoolId = user.userMetadata?['school_id'];
-          if (metaSchoolId != null && metaSchoolId is String && metaSchoolId.isNotEmpty) {
-            debugPrint('[StudentService fetchActiveSchoolId Debug]: Found metadata school_id: $metaSchoolId');
-            return metaSchoolId;
-          }
-        } catch (e) {
-          debugPrint('[StudentService fetchActiveSchoolId Warning]: $e');
-        }
-      }
-      throw const TenantResolutionException('Active school could not be resolved for current user. Please log in again.');
-    }
-    return 'offline_mock_school';
+    return TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: fallback,
+    );
   }
 
   Future<List<Map<String, dynamic>>> fetchClasses(String schoolId, String academicYearId, {String academicYearName = ''}) async {
@@ -497,10 +489,8 @@ class StudentService {
             .order('display_order', ascending: true);
 
         print("SCHOOL-ONLY CLASS COUNT = ${schoolOnly.length}");
-        if (schoolOnly is List) {
-          for (final row in schoolOnly) {
-            print("ROW id=${row['id']} school_id=${row['school_id']} academic_year_id=${row['academic_year_id']} name=${row['name']}");
-          }
+        for (final row in schoolOnly) {
+          print("ROW id=${row['id']} school_id=${row['school_id']} academic_year_id=${row['academic_year_id']} name=${row['name']}");
         }
 
         // Diagnostic Query 2: Filtered by school_id + academic_year_id
@@ -513,9 +503,9 @@ class StudentService {
 
         print("SCHOOL+AY CLASS COUNT = ${schoolAy.length}");
 
-        if (schoolAy is List && schoolAy.isNotEmpty) {
+        if (schoolAy.isNotEmpty) {
           result = List<Map<String, dynamic>>.from(schoolAy);
-        } else if (schoolOnly is List && schoolOnly.isNotEmpty) {
+        } else if (schoolOnly.isNotEmpty) {
           // If classes exist for school but academic_year_id needs linking
           try {
             await _client!
@@ -529,7 +519,7 @@ class StudentService {
                 .eq('school_id', schoolId)
                 .eq('academic_year_id', academicYearId)
                 .order('display_order', ascending: true);
-            if (reloaded is List && reloaded.isNotEmpty) {
+            if (reloaded.isNotEmpty) {
               result = List<Map<String, dynamic>>.from(reloaded);
             }
           } catch (_) {
@@ -561,10 +551,84 @@ class StudentService {
       }
     }
 
+    if (result.isEmpty && !SupabaseConfig.isConfigured) {
+      final effectiveAy = academicYearId.isNotEmpty ? academicYearId : 'mock_academic_year_id';
+      result = List.generate(12, (i) {
+        final num = i + 1;
+        return {
+          'id': 'mock_class_id_$num',
+          'school_id': schoolId.isNotEmpty ? schoolId : 'offline_mock_school',
+          'academic_year_id': effectiveAy,
+          'name': 'Class $num',
+          'display_order': num,
+          'status': 'ACTIVE',
+        };
+      });
+    }
+
     print("FETCH CLASSES SOURCE = Live Supabase public.classes");
     print("RETURNING CLASS COUNT = ${result.length}");
 
     return result;
+  }
+
+  Future<List<String>> fetchDistinctClassNames({required String schoolId}) async {
+    final cleanSchoolId = schoolId.trim();
+    if (_client != null && SupabaseConfig.isConfigured && cleanSchoolId.isNotEmpty) {
+      try {
+        final normalized = <String>{};
+        int offset = 0;
+        while (offset < 10000) {
+          final res = await _client!
+              .from('students')
+              .select('class_name')
+              .eq('school_id', cleanSchoolId)
+              .range(offset, offset + 999);
+          if (res.isNotEmpty) {
+            for (final row in res) {
+              final raw = row['class_name']?.toString().trim();
+              if (raw == null || raw.isEmpty) continue;
+              final numOnly = raw.replaceAll(RegExp(r'[^0-9]'), '');
+              if (numOnly.isNotEmpty) {
+                normalized.add('Class $numOnly');
+              } else {
+                normalized.add(raw);
+              }
+            }
+            if (res.length < 1000) break;
+            offset += res.length;
+            if (normalized.length >= 12) break;
+          } else {
+            break;
+          }
+        if (normalized.isNotEmpty) {
+          final list = normalized.toList();
+          list.sort((a, b) {
+            final numA = int.tryParse(a.replaceAll(RegExp(r'[^0-9]'), '')) ?? 999;
+            final numB = int.tryParse(b.replaceAll(RegExp(r'[^0-9]'), '')) ?? 999;
+            return numA.compareTo(numB);
+          });
+          return list;
+        }
+      } catch (e) {
+        debugPrint('[StudentService fetchDistinctClassNames Error]: $e');
+      }
+    }
+    final inMemory = _students
+        .where((s) => s.schoolId == cleanSchoolId && s.className.isNotEmpty)
+        .map((s) {
+          final raw = s.className.trim();
+          final numOnly = raw.replaceAll(RegExp(r'[^0-9]'), '');
+          return numOnly.isNotEmpty ? 'Class $numOnly' : raw;
+        })
+        .toSet()
+        .toList();
+    inMemory.sort((a, b) {
+      final numA = int.tryParse(a.replaceAll(RegExp(r'[^0-9]'), '')) ?? 999;
+      final numB = int.tryParse(b.replaceAll(RegExp(r'[^0-9]'), '')) ?? 999;
+      return numA.compareTo(numB);
+    });
+    return inMemory;
   }
 
   Future<List<Map<String, dynamic>>> fetchSections(String schoolId, String academicYearId, String classId) async {
@@ -578,7 +642,7 @@ class StudentService {
             .eq('class_id', classId)
             .order('name', ascending: true);
 
-        if (res is List && res.isNotEmpty) {
+        if (res.isNotEmpty) {
           result = List<Map<String, dynamic>>.from(res);
         } else {
           final List<Map<String, dynamic>> toInsertSecs = [];
@@ -595,7 +659,7 @@ class StudentService {
               .select('id, school_id, class_id, name')
               .order('name', ascending: true);
 
-          if (created is List && created.isNotEmpty) {
+          if (created.isNotEmpty) {
             result = List<Map<String, dynamic>>.from(created);
           }
         }
@@ -666,7 +730,16 @@ class StudentService {
     final normSchoolId = _normalizeUuid(schoolId);
     final normAyId = _normalizeUuid(academicYearId);
 
+    if (normSchoolId == null || normSchoolId.isEmpty) {
+      throw const TenantResolutionException('Valid school_id is required for student registration.');
+    }
+    if (normAyId == null || normAyId.isEmpty) {
+      throw const AcademicYearResolutionException('A valid active academic year is required for student registration.');
+    }
+
     final payload = <String, dynamic>{
+      'school_id': normSchoolId,
+      'academic_year_id': normAyId,
       'admission_number': admissionNumber,
       'first_name': finalFirstName,
       'last_name': finalLastName,
@@ -681,8 +754,6 @@ class StudentService {
       payload['student_photo'] = studentPhoto.trim();
     }
 
-    if (normSchoolId != null) payload['school_id'] = normSchoolId;
-    if (normAyId != null) payload['academic_year_id'] = normAyId;
     if (parentAccessCode != null && parentAccessCode.trim().isNotEmpty) {
       payload['parent_access_code'] = parentAccessCode.trim();
     }
@@ -800,7 +871,14 @@ class StudentService {
     }
 
     if (activeAcademicYearId == null || activeAcademicYearId.trim().isEmpty) {
-      throw Exception('No active academic year is configured for this school.');
+      if (!SupabaseConfig.isConfigured) {
+        activeAcademicYearId = 'mock_academic_year_id';
+      } else {
+        throw AcademicYearResolutionException(
+          'No active academic year is configured for school $activeSchoolId.',
+          schoolId: activeSchoolId,
+        );
+      }
     }
 
     final count = _students.length + 1;

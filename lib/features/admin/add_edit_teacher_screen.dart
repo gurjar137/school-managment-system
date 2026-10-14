@@ -9,6 +9,7 @@ import '../../data/models/academic_models.dart';
 import '../../data/models/staff_model.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/class_section_models.dart';
+import '../../core/widgets/app_back_button.dart';
 
 class AddEditTeacherScreen extends ConsumerStatefulWidget {
   final TeacherModel? teacherToEdit;
@@ -45,7 +46,6 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
   bool _obscureConfirmPassword = true;
 
   List<SchoolClassModel> _availableClasses = [];
-  bool _loadingClasses = false;
 
   bool get isEditMode => widget.teacherToEdit != null || widget.staffToEdit != null;
 
@@ -84,7 +84,6 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
   }
 
   Future<void> _fetchClassesForSchool() async {
-    setState(() => _loadingClasses = true);
     try {
       final activeSchoolId = ref.read(authProvider.notifier).activeProfile?.schoolId ?? '';
       if (activeSchoolId.isNotEmpty) {
@@ -92,15 +91,10 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
         if (mounted) {
           setState(() {
             _availableClasses = classes;
-            _loadingClasses = false;
           });
         }
-      } else {
-        if (mounted) setState(() => _loadingClasses = false);
       }
-    } catch (_) {
-      if (mounted) setState(() => _loadingClasses = false);
-    }
+    } catch (_) {}
   }
 
   @override
@@ -144,7 +138,7 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
     final className = _classController.text.trim();
     final sectionName = _sectionController.text.trim();
     final assignedClassStr = (className.isNotEmpty && sectionName.isNotEmpty)
-        ? ' - '
+        ? '$className - $sectionName'
         : (className.isNotEmpty ? className : sectionName);
 
     final recordId = widget.teacherToEdit?.id ?? widget.staffToEdit?.id ?? _empIdController.text.trim();
@@ -187,7 +181,7 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               backgroundColor: AppColors.mutedGreen,
-              content: Text(' details for  updated successfully!'),
+              content: Text('Details for ${_nameController.text.trim()} updated successfully!'),
             ),
           );
           context.pop(true);
@@ -215,7 +209,8 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
             name: _nameController.text.trim(),
             email: _emailController.text.trim(),
             subjects: [_subjectController.text.trim()],
-            assignedClass: assignedClassStr,
+            assignedClass: className,
+            assignedSection: sectionName,
             totalStudents: 0,
             avatarUrl: '',
             phone: _phoneController.text.trim(),
@@ -347,6 +342,16 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: AppBackButton(
+          fallbackPath: '/teachers',
+          onBeforeBack: () async {
+            if (!isEditMode && (_nameController.text.isNotEmpty || _emailController.text.isNotEmpty)) {
+              return await showDiscardChangesDialog(context);
+            }
+            return true;
+          },
+        ),
         title: Text(title, style: AppTypography.titleLarge),
       ),
       body: SingleChildScrollView(

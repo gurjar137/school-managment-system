@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../data/models/academic_models.dart';
+import '../../core/widgets/app_back_button.dart';
 
 class CreateHomeworkScreen extends ConsumerStatefulWidget {
   const CreateHomeworkScreen({super.key});
@@ -26,29 +27,42 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
   void _submit() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isSaving = true);
-      final newItem = HomeworkModel(
-        id: 'hw_${DateTime.now().millisecondsSinceEpoch}',
-        subject: _selectedSubject,
-        className: _selectedClass,
-        section: _selectedSection,
-        title: _titleController.text,
-        description: _descController.text,
-        assignedDate: DateTime.now(),
-        dueDate: _dueDate,
-        attachmentName: 'Assignment_Doc.pdf',
-        status: HomeworkStatus.active,
-      );
-
-      await ref.read(schoolRepositoryProvider).addHomework(newItem);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: AppColors.mutedGreen,
-            content: Text('Homework assigned successfully!'),
-          ),
+      try {
+        final user = ref.read(authProvider);
+        final newItem = HomeworkModel(
+          id: 'hw_${DateTime.now().millisecondsSinceEpoch}',
+          subject: _selectedSubject,
+          className: _selectedClass,
+          section: _selectedSection,
+          title: _titleController.text.trim(),
+          description: _descController.text.trim(),
+          assignedDate: DateTime.now(),
+          dueDate: _dueDate,
+          attachmentName: 'Assignment_Doc.pdf',
+          status: HomeworkStatus.active,
         );
-        context.pop();
+
+        await ref.read(schoolRepositoryProvider).addHomework(newItem, schoolId: user?.schoolId);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: AppColors.mutedGreen,
+              content: Text('Homework assigned successfully!'),
+            ),
+          );
+          context.pop();
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isSaving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppColors.softCoral,
+              content: Text('Failed to assign homework: $e'),
+            ),
+          );
+        }
       }
     }
   }
@@ -57,6 +71,16 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: AppBackButton(
+          fallbackPath: '/homework',
+          onBeforeBack: () async {
+            if (_titleController.text.isNotEmpty || _descController.text.isNotEmpty) {
+              return await showDiscardChangesDialog(context);
+            }
+            return true;
+          },
+        ),
         title: Text('Assign New Homework', style: AppTypography.titleLarge),
       ),
       body: SingleChildScrollView(

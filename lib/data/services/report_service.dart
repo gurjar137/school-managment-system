@@ -54,7 +54,7 @@ class ReportService {
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
         final rows = await _client!.from('students').select('standard, section, created_at');
-        if (rows is List) {
+        if (rows.isNotEmpty) {
           final totalStudents = rows.length;
           final Map<String, int> classCounts = {};
           int newAdmissions = 0;
@@ -100,7 +100,7 @@ class ReportService {
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
         final rows = await _client!.from('student_fee_accounts').select('net_fee, total_paid, current_due, students(standard)');
-        if (rows is List && rows.isNotEmpty) {
+        if (rows.isNotEmpty) {
           double expected = 0.0;
           double collected = 0.0;
           final Map<String, double> classCol = {};
@@ -144,7 +144,7 @@ class ReportService {
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
         final rows = await _client!.from('salary_payments').select('amount_paid, net_salary');
-        if (rows is List && rows.isNotEmpty) {
+        if (rows.isNotEmpty) {
           double totalPayroll = 0.0;
           double paidTotal = 0.0;
           for (final r in rows) {

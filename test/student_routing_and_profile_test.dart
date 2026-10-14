@@ -10,7 +10,7 @@ import "package:school_app/features/students/student_profile_screen.dart";
 
 class MockSchoolRepository extends SchoolRepository {
   final Map<String, StudentModel> mockStudents = {
-    "00000000-0000-4000-8000-000000000175": const StudentModel(
+    "00000000-0000-4000-8000-000000000175": StudentModel(
       id: "00000000-0000-4000-8000-000000000175",
       name: "Test Student 00175",
       rollNumber: "175",
@@ -42,7 +42,7 @@ class MockSchoolRepository extends SchoolRepository {
       feeStatus: PaymentStatus.paid,
       paymentHistory: [],
     ),
-    "TEST-ADM-00001": const StudentModel(
+    "TEST-ADM-00001": StudentModel(
       id: "00000000-0000-4000-8000-000000000001",
       name: "Test Student 00001",
       rollNumber: "1",

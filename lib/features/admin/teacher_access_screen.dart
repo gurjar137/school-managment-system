@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/access_models.dart';
 import '../../data/models/user_model.dart';
 
@@ -19,10 +20,13 @@ class _TeacherAccessScreenState extends ConsumerState<TeacherAccessScreen> {
   @override
   Widget build(BuildContext context) {
     final accessService = ref.watch(accessServiceProvider);
+    final activeSchoolId = ref.watch(authProvider.notifier).activeProfile?.schoolId;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/teachers'),
         title: Text('Teacher Login Permissions', style: AppTypography.titleLarge),
         actions: [
           IconButton(
@@ -62,7 +66,7 @@ class _TeacherAccessScreenState extends ConsumerState<TeacherAccessScreen> {
           const SizedBox(height: 10),
 
           FutureBuilder<List<TeacherAccessModel>>(
-            future: accessService.getTeacherAccessAccounts(),
+            future: accessService.getTeacherAccessAccounts(schoolId: activeSchoolId),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const LoadingStateWidget(message: 'Loading authorized accounts...');
@@ -370,8 +374,8 @@ class _TeacherAccessScreenState extends ConsumerState<TeacherAccessScreen> {
                           });
 
                           try {
-                            if (isEditing) {
-                              final updated = recordToEdit!.copyWith(
+                            if (recordToEdit != null) {
+                              final updated = recordToEdit.copyWith(
                                 teacherName: nameCtrl.text.trim(),
                                 email: emailCtrl.text.trim(),
                                 employeeId: empCtrl.text.trim(),

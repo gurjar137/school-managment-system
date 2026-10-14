@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/student_model.dart';
 import '../../data/models/fee_models.dart';
 
@@ -56,6 +57,8 @@ class _ParentChildFeeScreenState extends ConsumerState<ParentChildFeeScreen> {
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
+          leadingWidth: AppBackButton.leadingWidth,
+          leading: const AppBackButton(fallbackPath: '/fees'),
           title: Text('Fee Ledger & Receipts', style: AppTypography.titleLarge),
         ),
         body: const LoadingStateWidget(message: 'Loading fee records...'),
@@ -65,6 +68,8 @@ class _ParentChildFeeScreenState extends ConsumerState<ParentChildFeeScreen> {
     if (_students.isEmpty || _activeChildId == null) {
       return Scaffold(
         appBar: AppBar(
+          leadingWidth: AppBackButton.leadingWidth,
+          leading: const AppBackButton(fallbackPath: '/fees'),
           title: Text('Fee Ledger & Receipts', style: AppTypography.titleLarge),
         ),
         body: const EmptyStateWidget(
@@ -77,6 +82,8 @@ class _ParentChildFeeScreenState extends ConsumerState<ParentChildFeeScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/fees'),
         title: Text('Fee Ledger & Receipts', style: AppTypography.titleLarge),
       ),
       body: ListView(

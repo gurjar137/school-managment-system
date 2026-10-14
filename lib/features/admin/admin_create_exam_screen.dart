@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../data/models/result_models.dart';
+import '../../core/widgets/app_back_button.dart';
 
 class AdminCreateExamScreen extends ConsumerStatefulWidget {
   const AdminCreateExamScreen({super.key});
@@ -95,6 +96,16 @@ class _AdminCreateExamScreenState extends ConsumerState<AdminCreateExamScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: AppBackButton(
+          fallbackPath: '/results',
+          onBeforeBack: () async {
+            if (_titleController.text.isNotEmpty) {
+              return await showDiscardChangesDialog(context);
+            }
+            return true;
+          },
+        ),
         title: Text('Schedule Test / Exam (Admin)', style: AppTypography.titleLarge),
       ),
       body: SingleChildScrollView(

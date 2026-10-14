@@ -30,8 +30,61 @@ class AccessService {
   }
 
   // --- TEACHER ACCESS METHODS ---
-  Future<List<TeacherAccessModel>> getTeacherAccessAccounts() async {
+  Future<List<TeacherAccessModel>> getTeacherAccessAccounts({String? schoolId}) async {
     await Future.delayed(const Duration(milliseconds: 100));
+    final effectiveSchoolId = schoolId?.trim() ?? '';
+    if (_teacherAccessRecords.isEmpty && (effectiveSchoolId.isEmpty || effectiveSchoolId == '6254bee9-151d-4332-8a1c-3994af7d2153')) {
+      _teacherAccessRecords.addAll([
+        TeacherAccessModel(
+          id: 'tac_9e90f5ec',
+          teacherId: '9e90f5ec-0cf3-4615-b358-75a6357c6424',
+          teacherName: 'Test Teacher Class 1A',
+          email: 'test.teacher.1a@school-test.local',
+          employeeId: 'EMP-001',
+          assignedClass: 'Class 1-A',
+          subject: 'Primary Education',
+          isEnabled: true,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+        TeacherAccessModel(
+          id: 'tac_10a',
+          teacherId: 'b0000001-0000-0000-0000-000000000019',
+          teacherName: 'Test Teacher Class 10A',
+          email: 'test.teacher.10a@school-test.local',
+          employeeId: 'EMP-010',
+          assignedClass: 'Class 10-A',
+          subject: 'Mathematics',
+          isEnabled: true,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+        TeacherAccessModel(
+          id: 'tac_11a',
+          teacherId: 'b0000001-0000-0000-0000-000000000021',
+          teacherName: 'Test Teacher Class 11A',
+          email: 'test.teacher.11a@school-test.local',
+          employeeId: 'EMP-011',
+          assignedClass: 'Class 11-A',
+          subject: 'Physics',
+          isEnabled: true,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+        TeacherAccessModel(
+          id: 'tac_12a',
+          teacherId: 'b0000001-0000-0000-0000-000000000023',
+          teacherName: 'Test Teacher Class 12A',
+          email: 'test.teacher.12a@school-test.local',
+          employeeId: 'EMP-012',
+          assignedClass: 'Class 12-A',
+          subject: 'Chemistry',
+          isEnabled: true,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      ]);
+    }
     return List.unmodifiable(_teacherAccessRecords);
   }
 
@@ -207,7 +260,7 @@ class AccessService {
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
         final rows = await _client!.from('students').select();
-        if (rows is List && rows.isNotEmpty) {
+        if (rows.isNotEmpty) {
           final List<ParentAccessCodeModel> list = [];
           for (final row in rows) {
             final studentId = row['id']?.toString() ?? '';

@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/academic_models.dart';
 import '../../data/models/class_section_models.dart';
 import '../../data/models/timetable_model.dart';
@@ -295,8 +296,10 @@ class _TimetableManagementScreenState extends ConsumerState<TimetableManagementS
             academicYearId: _selectedYear!.id,
             classId: _selectedClass!.id,
             className: _selectedClass!.name,
+            classDisplayCode: _selectedClass!.displayCode,
             sectionId: _selectedSection?.id,
             sectionName: _selectedSection?.name,
+            sectionDisplayCode: _selectedSection?.displayCode,
             dayOfWeek: day,
             periodNumber: periodNumber,
             startTime: startTime,
@@ -635,6 +638,8 @@ class _TimetableManagementScreenState extends ConsumerState<TimetableManagementS
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/home'),
         elevation: 0.5,
         backgroundColor: isDark ? AppColors.darkSurface : AppColors.pureWhite,
         title: Row(

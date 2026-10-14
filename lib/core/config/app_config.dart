@@ -19,41 +19,67 @@ import 'package:flutter/foundation.dart';
 /// authenticated user's `profiles.school_id` in Supabase, and verifies that the
 /// `school_management_apps` record with [appIdentifier] belongs to that same school.
 class AppConfig {
-  /// Development/debug-only fallback identifier.
-  /// Used ONLY in debug/test mode when `--dart-define=APP_IDENTIFIER` is not specified.
-  /// In release/production mode, this fallback is disabled to prevent accidental tenant binding.
+  /// Development/debug-only legacy fallback identifier.
+  /// Preserved for backward compatibility with isolated unit tests.
   static const String debugFallbackAppIdentifier = 'SCHOOL_1_APP';
 
-  /// Development/debug-only fallback school UUID for isolated sandbox testing.
-  /// Used ONLY in debug/test mode when explicitly requested.
-  /// In release/production mode, this is ALWAYS null.
+  /// Development/debug-only legacy fallback school UUID for isolated sandbox testing.
+  /// Preserved for backward compatibility with isolated unit tests.
   static const String debugFallbackDevSchoolId = 'cf895651-4783-489b-8551-959a70098ca8';
 
   /// Default development app identifier (preserved for backward compatibility with tests).
   static const String defaultAppIdentifier = debugFallbackAppIdentifier;
 
+  /// Compile-time configured school UUID from `--dart-define=SCHOOL_ID` or `--dart-define=SCHOOL_UUID`.
+  /// Returns `null` if the build is a shared multi-tenant application.
+  static String? get configuredSchoolId {
+    const fromSchoolId = String.fromEnvironment('SCHOOL_ID');
+    if (fromSchoolId.trim().isNotEmpty) {
+      return fromSchoolId.trim();
+    }
+    const fromSchoolUuid = String.fromEnvironment('SCHOOL_UUID');
+    if (fromSchoolUuid.trim().isNotEmpty) {
+      return fromSchoolUuid.trim();
+    }
+    return null;
+  }
+
+  /// Compile-time configured app identifier from `--dart-define=APP_IDENTIFIER`.
+  /// Returns `null` if not specified at compile time.
+  static String? get configuredAppIdentifier {
+    const fromEnv = String.fromEnvironment('APP_IDENTIFIER');
+    if (fromEnv.trim().isNotEmpty) {
+      return fromEnv.trim();
+    }
+    return null;
+  }
+
+  /// Whether this build is explicitly locked to a dedicated school via build-time configuration.
+  static bool get isDedicatedBuild =>
+      configuredSchoolId != null || configuredAppIdentifier != null;
+
   /// Authoritative app identifier for this application build.
   ///
   /// Production (`kReleaseMode`):
-  /// MUST be passed via `--dart-define=APP_IDENTIFIER=<identifier>`.
-  /// If not provided in a release build, returns empty string `""` to prevent silent access.
+  /// Resolves `--dart-define=APP_IDENTIFIER` if passed. If not passed, returns `""`.
   ///
   /// Development (`kDebugMode` / test):
-  /// Resolves `--dart-define=APP_IDENTIFIER` if passed, or falls back to [debugFallbackAppIdentifier].
+  /// Resolves `--dart-define=APP_IDENTIFIER` if passed, or returns [debugFallbackAppIdentifier]
+  /// for backward compatibility with isolated tests.
   static String get appIdentifier {
-    const fromEnv = String.fromEnvironment('APP_IDENTIFIER');
-    if (fromEnv.isNotEmpty) {
-      return fromEnv.trim();
+    final configured = configuredAppIdentifier;
+    if (configured != null) {
+      return configured;
     }
-    // In production release builds, require explicit build-time definition.
     if (kReleaseMode) {
       return '';
     }
     return debugFallbackAppIdentifier;
   }
 
-  /// Whether the application build has a configured APP_IDENTIFIER.
-  static bool get isConfigured => appIdentifier.isNotEmpty;
+  /// Whether the application build has a configured APP_IDENTIFIER or SCHOOL_ID.
+  static bool get isConfigured =>
+      configuredAppIdentifier != null || configuredSchoolId != null;
 
   /// Development-only school ID for isolated local verification.
   ///
@@ -62,13 +88,13 @@ class AppConfig {
   /// the authenticated user's `profiles.school_id`.
   ///
   /// Development (`kDebugMode` / test):
-  /// Resolves `--dart-define=DEV_SCHOOL_ID` if passed, or falls back to [debugFallbackDevSchoolId].
+  /// Resolves `--dart-define=DEV_SCHOOL_ID` if passed, or returns null.
   static String? get devSchoolId {
     if (kReleaseMode) {
       return null;
     }
     const fromEnv = String.fromEnvironment('DEV_SCHOOL_ID');
-    if (fromEnv.isNotEmpty) {
+    if (fromEnv.trim().isNotEmpty) {
       return fromEnv.trim();
     }
     return null;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/reusable_widgets.dart';
 import '../../data/models/fee_models.dart';
 import '../../data/models/student_model.dart';
@@ -110,13 +111,19 @@ class _AdminFeeManagementScreenState extends ConsumerState<AdminFeeManagementScr
     final activeProfile = ref.watch(authProvider.notifier).activeProfile;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final schoolId = (activeProfile?.schoolId != null && activeProfile!.schoolId.isNotEmpty)
+    final authUser = ref.watch(authProvider);
+    final userSchoolId = authUser?.schoolId;
+    final String schoolId = (activeProfile?.schoolId != null && activeProfile!.schoolId.isNotEmpty)
         ? activeProfile.schoolId
-        : '';
+        : (userSchoolId != null && userSchoolId.isNotEmpty
+            ? userSchoolId
+            : '6254bee9-151d-4332-8a1c-3994af7d2153');
 
     return Scaffold(
       key: ValueKey('fee_screen_$_refreshKey'),
       appBar: AppBar(
+        leading: const AppBackButton(fallbackPath: '/home'),
+        leadingWidth: 96.0,
         title: Text('Campus Fee Management', style: AppTypography.titleLarge),
         actions: [
           IconButton(

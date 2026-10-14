@@ -4,9 +4,15 @@ import '../models/class_section_models.dart';
 import '../models/user_model.dart';
 import '../../core/config/supabase_config.dart';
 import '../../core/errors/exceptions.dart';
+import 'tenant_resolver.dart';
 
 class ClassSectionService {
+  final SupabaseClient? _clientOverride;
+
+  ClassSectionService({SupabaseClient? client}) : _clientOverride = client;
+
   SupabaseClient? get _client {
+    if (_clientOverride != null) return _clientOverride;
     try {
       if (SupabaseConfig.isConfigured) {
         return Supabase.instance.client;
@@ -15,41 +21,25 @@ class ClassSectionService {
     return null;
   }
 
+  /// Authoritatively resolves the active school ID for current user session.
   Future<String> fetchActiveSchoolId({String? fallback}) async {
-    if (fallback != null && fallback.isNotEmpty) {
-      return fallback;
-    }
-    if (_client != null && SupabaseConfig.isConfigured) {
-      final user = _client!.auth.currentUser;
-      if (user != null) {
-        try {
-          final prof = await _client!.from('profiles').select('school_id').eq('auth_user_id', user.id).maybeSingle();
-          if (prof != null && prof['school_id'] != null && prof['school_id'].toString().isNotEmpty) {
-            return prof['school_id'].toString();
-          }
-          final metaSchoolId = user.userMetadata?['school_id'];
-          if (metaSchoolId != null && metaSchoolId is String && metaSchoolId.isNotEmpty) {
-            return metaSchoolId;
-          }
-        } catch (e) {
-          debugPrint('[ClassSectionService fetchActiveSchoolId Warning]: $e');
-        }
-      }
-      throw const TenantResolutionException('Active school could not be resolved for current user. Please log in again.');
-    }
-    return 'offline_mock_school';
+    return TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: fallback,
+    );
   }
 
   // --- ACADEMIC YEARS ---
   Future<List<AcademicYearModel>> fetchAcademicYears(String schoolId) async {
+    final cleanSchoolId = schoolId.trim();
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
         var query = _client!.from('academic_years').select();
-        if (schoolId.isNotEmpty) {
-          query = query.eq('school_id', schoolId);
+        if (cleanSchoolId.isNotEmpty) {
+          query = query.eq('school_id', cleanSchoolId);
         }
         final data = await query.order('start_date', ascending: false);
-        if (data is List && data.isNotEmpty) {
+        if (data.isNotEmpty) {
           return data.map((y) => _mapAcademicYear(y)).toList();
         }
         return [];
@@ -79,92 +69,149 @@ class ClassSectionService {
     throw Exception('Database not connected. Cannot create academic year.');
   }
 
+  static bool isUuid(String? val) {
+    if (val == null || val.trim().isEmpty) return false;
+    return RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(val.trim());
+  }
+
   // --- CLASSES ---
   Future<List<SchoolClassModel>> fetchClasses(String schoolId, String academicYearId) async {
+    final cleanSchoolId = schoolId.trim();
+    final cleanAyId = academicYearId.trim();
+
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
-        final data = await _client!
+        var query = _client!
             .from('classes')
             .select()
-            .eq('school_id', schoolId)
-            .order('display_order', ascending: true);
+            .eq('school_id', cleanSchoolId);
 
-        List<Map<String, dynamic>> rawList = [];
-        if (data is List && data.isNotEmpty) {
-          rawList = List<Map<String, dynamic>>.from(data);
+        if (cleanAyId.isNotEmpty && isUuid(cleanAyId)) {
+          query = query.eq('academic_year_id', cleanAyId);
         }
 
-        // If no classes configured yet, discover distinct standards from students table
-        if (rawList.isEmpty) {
-          try {
-            final studentsData = await _client!
-                .from('students')
-                .select('standard, section')
-                .eq('school_id', schoolId);
+        final data = await query.order('display_order', ascending: true);
 
-            if (studentsData is List && studentsData.isNotEmpty) {
-              final distinctStandards = <String>{};
-              for (final s in studentsData) {
-                final std = (s['standard'] ?? '').toString().trim();
-                if (std.isNotEmpty) distinctStandards.add(std);
-              }
-
-              int order = 1;
-              for (final std in distinctStandards) {
-                try {
-                  final className = std.toLowerCase().startsWith('class') || std.toLowerCase().startsWith('grade')
-                      ? std
-                      : 'Class $std';
-                  final inserted = await _client!.from('classes').insert({
-                    'school_id': schoolId,
-                    'academic_year_id': academicYearId,
-                    'name': className,
-                    'display_order': int.tryParse(std.replaceAll(RegExp(r'\D'), '')) ?? order,
-                    'status': 'ACTIVE',
-                  }).select().single();
-                  rawList.add(inserted);
-                } catch (insertErr) {
-                  debugPrint('[ClassSectionService auto-seed error]: $insertErr');
-                }
-                order++;
-              }
-            }
-          } catch (e) {
-            debugPrint('[ClassSectionService discover student classes error]: $e');
-          }
-        }
-
-        if (rawList.isNotEmpty) {
+        if (data.isNotEmpty) {
+          final rawList = List<Map<String, dynamic>>.from(data);
           final classes = <SchoolClassModel>[];
           for (final c in rawList) {
             final classId = c['id'].toString();
             int secCount = 0;
             try {
               final secRes = await _client!.from('sections').select('id').eq('class_id', classId);
-              if (secRes is List) secCount = secRes.length;
+              secCount = secRes.length;
             } catch (_) {}
             classes.add(_mapClass(c, sectionsCount: secCount));
           }
           return classes;
         }
+
+        // Configured Supabase production mode: return real persisted classes (empty if none exist)
+        return [];
       } catch (e) {
         debugPrint('[ClassSectionService fetchClasses Warning]: $e');
+        return [];
       }
     }
 
+    // Pure offline / unconfigured mock mode ONLY
     return List.generate(12, (i) {
       final num = i + 1;
       return SchoolClassModel(
-        id: 'cls_$num',
-        schoolId: schoolId,
-        academicYearId: academicYearId,
+        id: 'mock_cls_$num',
+        code: 'cls_$num',
+        schoolId: cleanSchoolId,
+        academicYearId: cleanAyId,
         name: 'Class $num',
         displayOrder: num,
         sectionsCount: 3,
         status: AccountStatus.active,
-        createdAt: DateTime.now(),
+        createdAt: DateTime(2026, 9, 1),
       );
     });
+  }
+
+  /// Resolves an identifier (UUID, display code 'cls_1', or name 'Class 1', 'class_10')
+  /// to the canonical SchoolClassModel with a real database UUID.
+  Future<SchoolClassModel?> resolveClass({
+    required String schoolId,
+    required String classIdentifier,
+    String? academicYearId,
+  }) async {
+    final cleanId = classIdentifier.trim();
+    if (cleanId.isEmpty) return null;
+
+    final classes = await fetchClasses(schoolId, academicYearId ?? '');
+
+    // 1. Direct match by UUID
+    if (isUuid(cleanId)) {
+      final match = classes.where((c) => c.id.toLowerCase() == cleanId.toLowerCase()).firstOrNull;
+      if (match != null) return match;
+    }
+
+    // 2. Match by display code (e.g. 'cls_1', 'cls_10')
+    final matchByCode = classes.where((c) => c.displayCode.toLowerCase() == cleanId.toLowerCase()).firstOrNull;
+    if (matchByCode != null) return matchByCode;
+
+    // 3. Match by numeric display order (handles 'class_10', 'Grade 10', '10', 'cls-10')
+    final cleanDigits = cleanId.replaceAll(RegExp(r'\D'), '');
+    final numOrder = int.tryParse(cleanDigits);
+    if (numOrder != null) {
+      final matchByOrder = classes.where((c) => c.displayOrder == numOrder).firstOrNull;
+      if (matchByOrder != null) return matchByOrder;
+    }
+
+    // 4. Match by normalized name
+    final cleanName = cleanId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    for (final c in classes) {
+      if (c.name.toLowerCase() == cleanId.toLowerCase()) return c;
+      final cClean = c.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      if (cClean == cleanName) return c;
+    }
+
+    return null;
+  }
+
+  /// Resolves a section identifier (UUID, display code 'sec_cls_1_A', or name 'A', 'sec_a')
+  /// to the canonical SectionModel with a real database UUID.
+  Future<SectionModel?> resolveSection({
+    required String schoolId,
+    required String classId,
+    required String sectionIdentifier,
+  }) async {
+    final cleanId = sectionIdentifier.trim();
+    if (cleanId.isEmpty) return null;
+
+    final sections = await fetchSections(schoolId, classId);
+
+    // 1. Direct match by UUID
+    if (isUuid(cleanId)) {
+      final match = sections.where((s) => s.id.toLowerCase() == cleanId.toLowerCase()).firstOrNull;
+      if (match != null) return match;
+    }
+
+    // 2. Match by display code (e.g. 'sec_cls_1_A')
+    final matchByCode = sections.where((s) => s.displayCode.toLowerCase() == cleanId.toLowerCase()).firstOrNull;
+    if (matchByCode != null) return matchByCode;
+
+    // 3. Match by letter (e.g. 'sec_a', 'Section A', 'A')
+    final secLetters = cleanId.toUpperCase().replaceAll(RegExp(r'[^A-Z]'), '');
+    final lastLetter = secLetters.isNotEmpty ? secLetters.substring(secLetters.length - 1) : '';
+    if (lastLetter.isNotEmpty) {
+      final matchByLetter = sections.where((s) => s.name.toUpperCase().contains(lastLetter)).firstOrNull;
+      if (matchByLetter != null) return matchByLetter;
+    }
+
+    // 4. Match by normalized name
+    for (final s in sections) {
+      if (s.name.toLowerCase() == cleanId.toLowerCase()) return s;
+      final sClean = s.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      final cleanName = cleanId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      if (sClean == cleanName) return s;
+    }
+
+    return null;
   }
 
   Future<SchoolClassModel> createClass({
@@ -174,6 +221,9 @@ class ClassSectionService {
     int displayOrder = 1,
   }) async {
     final trimmedName = name.trim();
+    if (schoolId.trim().isEmpty) {
+      throw const TenantResolutionException('Cannot create class without a valid school ID.');
+    }
     if (_client != null && SupabaseConfig.isConfigured) {
       final res = await _client!.from('classes').insert({
         'school_id': schoolId,
@@ -187,50 +237,82 @@ class ClassSectionService {
     throw Exception('Database not connected. Cannot create class.');
   }
 
-  Future<void> deactivateClass(String classId) async {
+  Future<void> deactivateClass(String classId, {String? schoolId}) async {
     if (_client != null && SupabaseConfig.isConfigured) {
-      await _client!.from('classes').update({'status': 'INACTIVE'}).eq('id', classId);
+      var query = _client!.from('classes').update({'status': 'INACTIVE'}).eq('id', classId);
+      if (schoolId != null && schoolId.isNotEmpty) {
+        query = query.eq('school_id', schoolId);
+      }
+      await query;
     }
   }
 
-  Future<void> deleteClass(String classId) async {
+  Future<void> deleteClass(String classId, {String? schoolId}) async {
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
-        await _client!.from('sections').delete().eq('class_id', classId);
+        var secDelete = _client!.from('sections').delete().eq('class_id', classId);
+        if (schoolId != null && schoolId.isNotEmpty) {
+          secDelete = secDelete.eq('school_id', schoolId);
+        }
+        await secDelete;
       } catch (_) {}
-      await _client!.from('classes').delete().eq('id', classId);
+      var classDelete = _client!.from('classes').delete().eq('id', classId);
+      if (schoolId != null && schoolId.isNotEmpty) {
+        classDelete = classDelete.eq('school_id', schoolId);
+      }
+      await classDelete;
     }
   }
 
   // --- SECTIONS ---
   Future<List<SectionModel>> fetchSections(String schoolId, String classId) async {
-    if (_client != null && SupabaseConfig.isConfigured) {
-      try {
-        final data = await _client!
-            .from('sections')
-            .select()
-            .eq('school_id', schoolId)
-            .eq('class_id', classId)
-            .order('display_order', ascending: true);
+    final cleanSchoolId = schoolId.trim();
+    final cleanClassId = classId.trim();
 
-        if (data is List && data.isNotEmpty) {
-          return data.map((s) => _mapSection(s)).toList();
+    if (_client != null && SupabaseConfig.isConfigured) {
+      if (isUuid(cleanClassId)) {
+        try {
+          var query = _client!
+              .from('sections')
+              .select()
+              .eq('class_id', cleanClassId);
+          if (cleanSchoolId.isNotEmpty) {
+            query = query.eq('school_id', cleanSchoolId);
+          }
+          final data = await query.order('name', ascending: true);
+
+          if (data.isNotEmpty) {
+            return data.map((s) {
+              final map = Map<String, dynamic>.from(s);
+              if (map['school_id'] == null || map['school_id'].toString().isEmpty) {
+                map['school_id'] = cleanSchoolId;
+              }
+              return _mapSection(map);
+            }).toList();
+          }
+          // Configured Supabase production mode: return real persisted sections (empty if none exist)
+          return [];
+        } catch (e) {
+          debugPrint('[ClassSectionService fetchSections Warning]: $e');
+          return [];
         }
-      } catch (e) {
-        debugPrint('[ClassSectionService fetchSections Warning]: $e');
       }
+      return [];
     }
 
+    // Pure offline / unconfigured mock mode ONLY
+    final classNum = int.tryParse(cleanClassId.replaceAll(RegExp(r'\D'), '')) ?? 1;
     return ['A', 'B', 'C'].map((sec) {
       return SectionModel(
-        id: 'sec_${classId}_$sec',
-        schoolId: schoolId,
+        id: 'mock_sec_${classNum}_$sec',
+        code: 'sec_cls_${classNum}_$sec',
+        schoolId: cleanSchoolId,
         academicYearId: '',
-        classId: classId,
+        classId: cleanClassId,
         name: 'Section $sec',
         displayOrder: sec.codeUnitAt(0),
         status: AccountStatus.active,
-        createdAt: DateTime.now(),
+        createdAt: DateTime(2026, 9, 1),
       );
     }).toList();
   }
@@ -243,6 +325,9 @@ class ClassSectionService {
     int? capacity,
   }) async {
     final trimmedName = name.trim();
+    if (schoolId.trim().isEmpty) {
+      throw const TenantResolutionException('Cannot create section without a valid school ID.');
+    }
     if (_client != null && SupabaseConfig.isConfigured) {
       final res = await _client!.from('sections').insert({
         'school_id': schoolId,
@@ -258,9 +343,13 @@ class ClassSectionService {
     throw Exception('Database not connected. Cannot create section.');
   }
 
-  Future<void> deleteSection(String sectionId) async {
+  Future<void> deleteSection(String sectionId, {String? schoolId}) async {
     if (_client != null && SupabaseConfig.isConfigured) {
-      await _client!.from('sections').delete().eq('id', sectionId);
+      var query = _client!.from('sections').delete().eq('id', sectionId);
+      if (schoolId != null && schoolId.isNotEmpty) {
+        query = query.eq('school_id', schoolId);
+      }
+      await query;
     }
   }
 
@@ -277,14 +366,19 @@ class ClassSectionService {
   }
 
   SchoolClassModel _mapClass(Map<String, dynamic> data, {int sectionsCount = 0}) {
+    final order = data['display_order'] is int
+        ? data['display_order'] as int
+        : (int.tryParse(data['display_order']?.toString() ?? '') ?? 1);
+    final rawCode = data['code']?.toString();
+    final code = (rawCode != null && rawCode.isNotEmpty) ? rawCode : 'cls_$order';
+
     return SchoolClassModel(
       id: data['id']?.toString() ?? '',
+      code: code,
       schoolId: data['school_id']?.toString() ?? '',
       academicYearId: data['academic_year_id']?.toString() ?? '',
       name: data['name']?.toString() ?? '',
-      displayOrder: data['display_order'] is int
-          ? data['display_order']
-          : (int.tryParse(data['display_order']?.toString() ?? '') ?? 1),
+      displayOrder: order,
       sectionsCount: sectionsCount > 0 ? sectionsCount : (data['sections_count'] ?? 0),
       status: (data['status']?.toString().toUpperCase() == 'INACTIVE') ? AccountStatus.inactive : AccountStatus.active,
       createdAt: DateTime.tryParse(data['created_at']?.toString() ?? '') ?? DateTime.now(),
@@ -292,14 +386,18 @@ class ClassSectionService {
   }
 
   SectionModel _mapSection(Map<String, dynamic> data) {
+    final rawCode = data['code']?.toString();
+    final code = (rawCode != null && rawCode.isNotEmpty) ? rawCode : 'sec_${data['class_id']}_${data['name']}';
+
     return SectionModel(
       id: data['id']?.toString() ?? '',
+      code: code,
       schoolId: data['school_id']?.toString() ?? '',
       academicYearId: data['academic_year_id']?.toString() ?? '',
       classId: data['class_id']?.toString() ?? '',
       name: data['name']?.toString() ?? '',
       displayOrder: data['display_order'] is int
-          ? data['display_order']
+          ? data['display_order'] as int
           : (int.tryParse(data['display_order']?.toString() ?? '') ?? 1),
       capacity: data['capacity'] is int ? data['capacity'] : int.tryParse(data['capacity']?.toString() ?? ''),
       status: (data['status']?.toString().toUpperCase() == 'INACTIVE') ? AccountStatus.inactive : AccountStatus.active,

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/reusable_widgets.dart';
 import '../../data/models/school_management_models.dart';
 
@@ -86,6 +87,8 @@ class _SchoolSettingsScreenState extends ConsumerState<SchoolSettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const AppBackButton(fallbackPath: '/settings'),
+        leadingWidth: 96.0,
         title: Text('School Configuration', style: AppTypography.titleLarge),
         actions: [
           IconButton(

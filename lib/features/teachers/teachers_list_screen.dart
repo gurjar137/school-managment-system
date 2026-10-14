@@ -72,7 +72,11 @@ class _TeachersListScreenState extends ConsumerState<TeachersListScreen> {
 
           Expanded(
             child: FutureBuilder<List<TeacherModel>>(
-              future: teacherService.getTeachers(query: _searchCtrl.text),
+              future: teacherService.getTeachers(
+                schoolId: user?.schoolId,
+                query: _searchCtrl.text,
+                includeStaff: true,
+              ),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const LoadingStateWidget(message: 'Loading faculty directory...');

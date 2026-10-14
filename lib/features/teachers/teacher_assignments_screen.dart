@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/academic_models.dart';
 
 class TeacherAssignmentsScreen extends ConsumerStatefulWidget {
@@ -39,7 +40,11 @@ class _TeacherAssignmentsScreenState extends ConsumerState<TeacherAssignmentsScr
   Widget build(BuildContext context) {
     if (_t.id.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Teacher Assignments')),
+        appBar: AppBar(
+          leadingWidth: AppBackButton.leadingWidth,
+          leading: const AppBackButton(fallbackPath: '/teachers'),
+          title: const Text('Teacher Assignments'),
+        ),
         body: const EmptyStateWidget(
           icon: Icons.person_off_rounded,
           title: 'No Teacher Selected',
@@ -52,6 +57,8 @@ class _TeacherAssignmentsScreenState extends ConsumerState<TeacherAssignmentsScr
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/teachers'),
         title: Text('${_t.name} Assignments', style: AppTypography.titleLarge),
         actions: [
           IconButton(
@@ -169,7 +176,7 @@ class _TeacherAssignmentsScreenState extends ConsumerState<TeacherAssignmentsScr
   }
 
   void _showAssignModal(BuildContext context) {
-    String selectedClass = 'Class 8-A';
+    String selectedClass = 'Class 1-A';
     String selectedSubject = 'Mathematics';
     bool isClassTeacher = true;
 
@@ -185,9 +192,14 @@ class _TeacherAssignmentsScreenState extends ConsumerState<TeacherAssignmentsScr
                 value: selectedClass,
                 decoration: const InputDecoration(labelText: 'Target Class & Section'),
                 items: const [
-                  DropdownMenuItem(value: 'Class 8-A', child: Text('Class 8-A')),
-                  DropdownMenuItem(value: 'Class 9-B', child: Text('Class 9-B')),
+                  DropdownMenuItem(value: 'Class 1-A', child: Text('Class 1-A')),
+                  DropdownMenuItem(value: 'Class 1-B', child: Text('Class 1-B')),
                   DropdownMenuItem(value: 'Class 10-A', child: Text('Class 10-A')),
+                  DropdownMenuItem(value: 'Class 10-B', child: Text('Class 10-B')),
+                  DropdownMenuItem(value: 'Class 11-A', child: Text('Class 11-A')),
+                  DropdownMenuItem(value: 'Class 11-B', child: Text('Class 11-B')),
+                  DropdownMenuItem(value: 'Class 12-A', child: Text('Class 12-A')),
+                  DropdownMenuItem(value: 'Class 12-B', child: Text('Class 12-B')),
                 ],
                 onChanged: (v) {
                   if (v != null) selectedClass = v;

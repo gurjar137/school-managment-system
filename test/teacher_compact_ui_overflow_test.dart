@@ -9,7 +9,7 @@ import "package:school_app/features/students/students_list_screen.dart";
 import "package:school_app/features/students/student_profile_screen.dart";
 
 class FakeOverflowRepository extends SchoolRepository {
-  final StudentModel longNameStudent = const StudentModel(
+  final StudentModel longNameStudent = StudentModel(
     id: "test-stu-overflow-1",
     name: "Sri Ramachandra Venkatasubramanian The Third of Bangalore",
     rollNumber: "9999",
@@ -44,9 +44,12 @@ class FakeOverflowRepository extends SchoolRepository {
 
   @override
   Future<List<StudentModel>> getStudents({
+    String? schoolId,
     String? query,
     String? className,
     String? section,
+    String? academicYearId,
+    AccountStatus? status,
     bool isTeacher = false,
     String? teacherAssignedClass,
     String? teacherAssignedSection,

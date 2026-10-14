@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../core/utils/teacher_assignment_parser.dart';
 import '../../data/models/student_model.dart';
 import '../../data/models/attendance_model.dart';
@@ -42,6 +43,8 @@ class _MarkAttendanceScreenState extends ConsumerState<MarkAttendanceScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/attendance'),
         title: Text('Daily Attendance Register', style: AppTypography.titleLarge),
         actions: [
           IconButton(

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/app_back_button.dart';
 
 class AdminLoginScreen extends ConsumerStatefulWidget {
   const AdminLoginScreen({super.key});
@@ -218,6 +219,8 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/role-selection'),
         title: Text('Admin Portal Login', style: AppTypography.titleLarge),
       ),
       body: SafeArea(
@@ -242,22 +245,43 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
 
                 if (_errorMessage != null) ...[
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppColors.softCoral.withOpacity(0.12),
+                      color: AppColors.softCoral.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: AppColors.softCoral),
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.error_outline_rounded, color: AppColors.softCoral, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            _errorMessage!,
-                            style: AppTypography.bodySmall.copyWith(color: AppColors.softCoral, fontWeight: FontWeight.w700),
-                          ),
+                        Row(
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: AppColors.softCoral, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: AppTypography.bodySmall.copyWith(color: AppColors.softCoral, fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ],
                         ),
+                        if (_errorMessage!.contains('Staff Login') || _errorMessage!.contains('administrator access')) ...[
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.midnightNavy,
+                                side: const BorderSide(color: AppColors.midnightNavy),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: () => context.go('/login/staff'),
+                              icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                              label: const Text('Go to Staff Login'),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -314,6 +338,15 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () => context.go('/login/staff'),
+                    icon: const Icon(Icons.badge_outlined, size: 18),
+                    label: const Text('Staff or Teacher? Go to Staff Login'),
+                  ),
+                ),
+                const SizedBox(height: 4),
 
                 Center(
                   child: TextButton.icon(

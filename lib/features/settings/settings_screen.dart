@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -15,6 +16,8 @@ class SettingsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/home'),
         title: Text('App & School Settings', style: AppTypography.titleLarge),
       ),
       body: ListView(
@@ -74,6 +77,28 @@ class SettingsScreen extends ConsumerWidget {
                   'Update your account password securely',
                   Icons.lock_outline_rounded,
                   onTap: () => context.push('/change-password'),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.logout_rounded, color: AppColors.softCoral),
+                  title: Text(
+                    'Log Out & Switch Account',
+                    style: AppTypography.titleSmall.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.softCoral,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Sign out of this session and switch staff or admin accounts',
+                    style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.softCoral),
+                  onTap: () async {
+                    await ref.read(authProvider.notifier).logout();
+                    if (context.mounted) {
+                      context.go('/role-selection');
+                    }
+                  },
                 ),
               ],
             ),

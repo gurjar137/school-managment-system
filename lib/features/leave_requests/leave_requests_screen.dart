@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/academic_models.dart';
 
 class LeaveRequestsScreen extends ConsumerStatefulWidget {
@@ -23,6 +24,8 @@ class _LeaveRequestsScreenState extends ConsumerState<LeaveRequestsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/home'),
         title: Text('Student Leave Applications', style: AppTypography.titleLarge),
       ),
       body: Column(

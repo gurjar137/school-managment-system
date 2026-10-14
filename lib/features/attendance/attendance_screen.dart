@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/reusable_widgets.dart';
 import '../../core/utils/teacher_assignment_parser.dart';
 import '../../data/models/student_model.dart';
@@ -24,14 +25,41 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
   bool _hasMore = true;
   int _offset = 0;
   static const int _pageSize = 50;
+  bool _hasNoActiveAcademicYear = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadInitialStudents();
+      _checkAcademicYearAndLoad();
     });
+  }
+
+  Future<void> _checkAcademicYearAndLoad() async {
+    final user = ref.read(authProvider);
+    final studentService = ref.read(studentServiceProvider);
+    final schoolId = (user?.schoolId != null && user!.schoolId!.isNotEmpty)
+        ? user.schoolId!
+        : await studentService.fetchActiveSchoolId();
+
+    try {
+      final activeAyId = await studentService.fetchActiveAcademicYearId(schoolId);
+      if (mounted) {
+        setState(() {
+          _hasNoActiveAcademicYear = activeAyId == null || activeAyId.isEmpty;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _hasNoActiveAcademicYear = true;
+        });
+      }
+    }
+
+    if (!mounted) return;
+    await _loadInitialStudents();
   }
 
   @override
@@ -51,6 +79,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
   }
 
   Future<void> _loadInitialStudents() async {
+    if (!mounted) return;
     final roster = ref.read(teacherRosterProvider).value;
     if (roster != null && roster.isNotEmpty) {
       if (mounted) {
@@ -62,6 +91,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
       }
     }
 
+    if (!mounted) return;
     final notifier = ref.read(attendanceBoardProvider.notifier);
     await notifier.loadClassAttendanceSummary();
 
@@ -201,6 +231,8 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const AppBackButton(fallbackPath: '/home'),
+        leadingWidth: 96.0,
         title: Text('Attendance Engine', style: AppTypography.titleLarge),
         actions: [
           IconButton(
@@ -230,6 +262,46 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
       ),
       body: Column(
         children: [
+          if (_hasNoActiveAcademicYear)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.softCoral.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.softCoral),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, color: AppColors.softCoral, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'No active academic year is configured for this school. Attendance marking requires an active academic year session.',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppColors.softCoral,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (user?.role == UserRole.schoolAdmin || user?.role == UserRole.superAdmin) ...[
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.softLavender,
+                        foregroundColor: AppColors.pureWhite,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () => context.push('/academic-years'),
+                      child: const Text('Configure', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           // Selectors Bar (Class, Section, Date)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

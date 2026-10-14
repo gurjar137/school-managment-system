@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/result_models.dart';
 import '../../data/models/student_model.dart';
 import '../../data/services/grade_service.dart';
@@ -322,7 +323,11 @@ class _ParentChildResultScreenState extends ConsumerState<ParentChildResultScree
 
     if (_student == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Academic Report Card')),
+        appBar: AppBar(
+          leadingWidth: AppBackButton.leadingWidth,
+          leading: const AppBackButton(fallbackPath: '/results'),
+          title: const Text('Academic Report Card'),
+        ),
         body: const EmptyStateWidget(
           icon: Icons.school_outlined,
           title: 'No Student Found',
@@ -335,6 +340,8 @@ class _ParentChildResultScreenState extends ConsumerState<ParentChildResultScree
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/results'),
         title: Text('${student.name} — Report Card', style: AppTypography.titleLarge),
         actions: [
           IconButton(

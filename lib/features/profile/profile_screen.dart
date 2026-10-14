@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/reusable_widgets.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -16,6 +17,8 @@ class ProfileScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const AppBackButton(fallbackPath: '/home'),
+        leadingWidth: 96.0,
         title: Text('Account & Profile', style: AppTypography.titleLarge),
       ),
       body: SingleChildScrollView(
@@ -68,9 +71,11 @@ class ProfileScreen extends ConsumerWidget {
                   _buildProfileOption(
                     Icons.swap_horiz_rounded,
                     'Switch Role / Mode',
-                    () {
-                      ref.read(authProvider.notifier).logout();
-                      context.go('/role-selection');
+                    () async {
+                      await ref.read(authProvider.notifier).logout();
+                      if (context.mounted) {
+                        context.go('/role-selection');
+                      }
                     },
                     textColor: AppColors.softLavender,
                   ),

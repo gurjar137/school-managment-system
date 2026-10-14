@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/result_models.dart';
 
 class AdminResultsScreen extends ConsumerStatefulWidget {
@@ -41,6 +42,8 @@ class _AdminResultsScreenState extends ConsumerState<AdminResultsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/home'),
         title: Text('Admin Exam & Result Reviewer', style: AppTypography.titleLarge),
         actions: [
           IconButton(

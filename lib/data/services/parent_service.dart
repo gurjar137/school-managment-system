@@ -117,21 +117,19 @@ class ParentService {
         }
 
         final data = await supabaseQuery.order('created_at', ascending: false);
-        if (data is List) {
+        if (data.isNotEmpty) {
           // Fetch linked students from parent_students
           Map<String, List<ParentStudentLinkModel>> linksMap = {};
-          try {
-            final linksData = await _client!
-                .from('parent_students')
-                .select()
-                .eq('school_id', activeSchoolId);
-            if (linksData is List) {
-              for (final row in linksData) {
-                final linkModel = ParentStudentLinkModel.fromJson(row);
-                linksMap.putIfAbsent(linkModel.parentId, () => []).add(linkModel);
-              }
-            }
-          } catch (_) {}
+        try {
+          final linksData = await _client!
+              .from('parent_students')
+              .select()
+              .eq('school_id', activeSchoolId);
+          for (final row in linksData) {
+            final linkModel = ParentStudentLinkModel.fromJson(row);
+            linksMap.putIfAbsent(linkModel.parentId, () => []).add(linkModel);
+          }
+        } catch (_) {}
 
           final liveParents = data.map((p) {
             final model = ParentModel.fromJson(p);
@@ -401,7 +399,7 @@ class ParentService {
             .from('parent_students')
             .select()
             .eq('parent_id', parentId);
-        if (data is List && data.isNotEmpty) {
+        if (data.isNotEmpty) {
           final liveList = data.map((d) => ParentStudentLinkModel.fromJson(d)).toList();
           for (final item in liveList) {
             if (!_cachedLinks.any((l) => l.id == item.id)) {

@@ -4,21 +4,168 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../data/models/academic_models.dart';
+import '../../data/models/user_model.dart';
 
-class NoticesScreen extends ConsumerWidget {
+class NoticesScreen extends ConsumerStatefulWidget {
   const NoticesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NoticesScreen> createState() => _NoticesScreenState();
+}
+
+class _NoticesScreenState extends ConsumerState<NoticesScreen> {
+  int _refreshCounter = 0;
+
+  void _showPublishNoticeDialog(BuildContext context) {
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+    String category = 'General';
+    bool isPinned = false;
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text('Publish New Notice', style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold)),
+            content: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: titleController,
+                      decoration: const InputDecoration(
+                        labelText: 'Notice Title *',
+                        hintText: 'e.g. Annual Sports Day 2026-27',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a title' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: category,
+                      decoration: const InputDecoration(
+                        labelText: 'Category',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'General', child: Text('General')),
+                        DropdownMenuItem(value: 'Academic', child: Text('Academic')),
+                        DropdownMenuItem(value: 'Sports', child: Text('Sports')),
+                        DropdownMenuItem(value: 'Event', child: Text('Event')),
+                        DropdownMenuItem(value: 'Exam', child: Text('Exam')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() => category = val);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: contentController,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Content *',
+                        hintText: 'Enter full announcement details...',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter content' : null,
+                    ),
+                    const SizedBox(height: 8),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Pin to top of notice board'),
+                      value: isPinned,
+                      onChanged: (val) {
+                        setDialogState(() => isPinned = val ?? false);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (formKey.currentState?.validate() ?? false) {
+                    final repo = ref.read(schoolRepositoryProvider);
+                    final user = ref.read(authProvider);
+                    final newNotice = NoticeModel(
+                      id: 'notice_${DateTime.now().millisecondsSinceEpoch}',
+                      title: titleController.text.trim(),
+                      content: contentController.text.trim(),
+                      category: category,
+                      date: DateTime.now(),
+                      author: user?.name ?? 'Administration',
+                      isPinned: isPinned,
+                      isUnread: true,
+                    );
+                    Navigator.of(ctx).pop();
+                    await repo.addNotice(newNotice, schoolId: user?.schoolId);
+                    if (mounted) {
+                      setState(() => _refreshCounter++);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Notice published successfully!'),
+                          backgroundColor: AppColors.mutedGreen,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Publish'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final repo = ref.watch(schoolRepositoryProvider);
+    final user = ref.watch(authProvider);
+    final canPublish = user?.role == UserRole.schoolAdmin || user?.role == UserRole.teacher;
 
     return Scaffold(
       appBar: AppBar(
+        leading: const AppBackButton(fallbackPath: '/home'),
+        leadingWidth: 96.0,
         title: Text('Official Notices & Bulletins', style: AppTypography.titleLarge),
+        actions: [
+          if (canPublish)
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline_rounded),
+              tooltip: 'Publish Notice',
+              onPressed: () => _showPublishNoticeDialog(context),
+            ),
+        ],
       ),
-      body: FutureBuilder(
-        future: repo.getNotices(),
+      floatingActionButton: canPublish
+          ? FloatingActionButton.extended(
+              onPressed: () => _showPublishNoticeDialog(context),
+              icon: const Icon(Icons.campaign_rounded),
+              label: const Text('Publish Notice'),
+              backgroundColor: AppColors.midnightNavy,
+              foregroundColor: AppColors.pureWhite,
+            )
+          : null,
+      body: FutureBuilder<List<NoticeModel>>(
+        key: ValueKey(_refreshCounter),
+        future: repo.getNotices(schoolId: user?.schoolId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingStateWidget(message: 'Loading school bulletins...');

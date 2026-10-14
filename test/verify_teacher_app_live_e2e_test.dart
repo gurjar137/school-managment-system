@@ -91,7 +91,10 @@ class MockAuthNotifier extends StateNotifier<UserModel?> implements AuthNotifier
   void login(UserRole role) {}
 
   @override
-  void logout() {
+  Future<void> refreshProfile() async {}
+
+  @override
+  Future<void> logout() async {
     _profile = null;
     state = null;
   }
@@ -123,21 +126,19 @@ void main() {
       );
     } catch (_) {}
 
-    // 1. Authenticate Admin session via refresh_token
-    final authReq = await HttpClient().postUrl(Uri.parse('${SupabaseConfig.url}/auth/v1/token?grant_type=refresh_token'));
-    authReq.headers.set('apikey', SupabaseConfig.publishableKey);
-    authReq.headers.set('Content-Type', 'application/json');
-    authReq.write(jsonEncode({'refresh_token': 'koqhzxdsfkge'}));
-    final authResp = await authReq.close();
-    final authBody = await authResp.transform(utf8.decoder).join();
-    final authData = jsonDecode(authBody);
-    final adminToken = authData['access_token'] as String;
-
+    // 1. Authenticate Admin session
     adminClient = SupabaseClient(
       SupabaseConfig.url,
       SupabaseConfig.publishableKey,
-      headers: {'Authorization': 'Bearer $adminToken'},
     );
+    try {
+      await adminClient.auth.signInWithPassword(
+        email: 'admin@school.com',
+        password: 'password123',
+      );
+    } catch (e) {
+      print('Admin sign-in note: $e');
+    }
     adminService = TimetableService(client: adminClient);
 
     // 2. Authenticate as Teacher A

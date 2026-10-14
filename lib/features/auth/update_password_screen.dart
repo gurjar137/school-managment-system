@@ -9,6 +9,7 @@ import '../../core/theme/app_typography.dart';
 import '../../data/services/auth_service.dart';
 
 import '../../core/auth/recovery_session_state.dart';
+import '../../core/widgets/app_back_button.dart';
 
 class UpdatePasswordScreen extends ConsumerStatefulWidget {
   final bool bypassSessionCheckForTesting;
@@ -32,14 +33,9 @@ class _UpdatePasswordScreenState extends ConsumerState<UpdatePasswordScreen> {
   String? _errorMessage;
   String? _successMessage;
 
-  bool _recoveryEventReceived = false;
-  bool _sessionEstablishedBefore = false;
-  bool _sessionEstablishedInside = false;
-
   @override
   void initState() {
     super.initState();
-    _sessionEstablishedBefore = _hasActiveSession;
     RecoverySessionState.openedAfterProcessing = !RecoverySessionState.isProcessing;
 
     if (RecoverySessionState.isProcessing) {
@@ -61,13 +57,10 @@ class _UpdatePasswordScreenState extends ConsumerState<UpdatePasswordScreen> {
         _authSub = client.auth.onAuthStateChange.listen((data) {
           final event = data.event;
           if (event == AuthChangeEvent.passwordRecovery) {
-            _recoveryEventReceived = true;
             RecoverySessionState.recoveryEventReceived = true;
           }
           if (_hasActiveSession && mounted) {
-            setState(() {
-              _sessionEstablishedInside = true;
-            });
+            setState(() {});
           }
           RecoverySessionState.printSafeDiagnostics(contextTag: 'ResetPasswordScreen onAuthStateChange');
         });
@@ -77,15 +70,6 @@ class _UpdatePasswordScreenState extends ConsumerState<UpdatePasswordScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       RecoverySessionState.printSafeDiagnostics(contextTag: 'ResetPasswordScreen PostFrame');
     });
-  }
-
-  User? get _currentAuthUser {
-    if (!SupabaseConfig.isConfigured) return null;
-    try {
-      return Supabase.instance.client.auth.currentUser;
-    } catch (_) {
-      return null;
-    }
   }
 
   @override
@@ -197,10 +181,8 @@ class _UpdatePasswordScreenState extends ConsumerState<UpdatePasswordScreen> {
       return Scaffold(
         appBar: AppBar(
           title: Text('Reset Password', style: AppTypography.titleLarge),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.go('/login/admin'),
-          ),
+          leadingWidth: AppBackButton.leadingWidth,
+          leading: const AppBackButton(fallbackPath: '/login/admin'),
         ),
         body: const Center(
           child: Column(
@@ -224,10 +206,8 @@ class _UpdatePasswordScreenState extends ConsumerState<UpdatePasswordScreen> {
       return Scaffold(
         appBar: AppBar(
           title: Text('Reset Password', style: AppTypography.titleLarge),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.go('/login/admin'),
-          ),
+          leadingWidth: AppBackButton.leadingWidth,
+          leading: const AppBackButton(fallbackPath: '/login/admin'),
         ),
         body: SafeArea(
           child: Center(
@@ -289,10 +269,8 @@ class _UpdatePasswordScreenState extends ConsumerState<UpdatePasswordScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Reset Password', style: AppTypography.titleLarge),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/login/admin'),
-        ),
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/login/admin'),
       ),
       body: SafeArea(
         child: SingleChildScrollView(

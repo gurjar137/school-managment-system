@@ -10,7 +10,7 @@ class MockStudentService extends StudentService {
   MockStudentService() : super();
 
   @override
-  Future<String> fetchActiveSchoolId({String fallback = "6254bee9-151d-4332-8a1c-3994af7d2153"}) async => "school-123";
+  Future<String> fetchActiveSchoolId({String? fallback = "6254bee9-151d-4332-8a1c-3994af7d2153"}) async => "school-123";
 
   @override
   Future<String?> fetchActiveAcademicYearId(String schoolId) async => "ay-2026";
@@ -40,9 +40,12 @@ class PaginatedFakeRepository extends SchoolRepository {
 
   @override
   Future<List<StudentModel>> getStudents({
+    String? schoolId,
     String? query,
     String? className,
     String? section,
+    String? academicYearId,
+    AccountStatus? status,
     bool isTeacher = false,
     String? teacherAssignedClass,
     String? teacherAssignedSection,

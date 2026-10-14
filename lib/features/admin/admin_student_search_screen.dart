@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/student_model.dart';
 
 class AdminStudentSearchScreen extends ConsumerStatefulWidget {
@@ -41,6 +42,8 @@ class _AdminStudentSearchScreenState extends ConsumerState<AdminStudentSearchScr
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/students'),
         title: Text('Global Student Search', style: AppTypography.titleLarge),
       ),
       body: Column(

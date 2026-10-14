@@ -5,8 +5,6 @@ import 'app_typography.dart';
 
 class AppTheme {
   static ThemeData get lightTheme {
-    final baseText = AppTypography.bodyMedium;
-
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,

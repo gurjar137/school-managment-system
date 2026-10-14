@@ -290,15 +290,27 @@ class AuthService {
 
       try {
         debugPrint('[AuthService] Changing user password via Supabase Auth (isFirstLogin=$isFirstLogin)...');
+        final currentUser = client.auth.currentUser;
+        final existingMeta = currentUser?.userMetadata != null
+            ? Map<String, dynamic>.from(currentUser!.userMetadata!)
+            : <String, dynamic>{};
+        existingMeta['must_change_password'] = false;
+
         final res = await client.auth.updateUser(
           UserAttributes(
             password: newPassword.trim(),
-            data: {'must_change_password': false},
+            data: existingMeta,
           ),
         );
 
         if (res.user == null) {
           throw Exception('Password update did not return a valid user confirmation.');
+        }
+
+        try {
+          await client.auth.refreshSession();
+        } catch (refErr) {
+          debugPrint('[AuthService Session Refresh Notice]: $refErr');
         }
 
         debugPrint('[AuthService] Password updated successfully for: ${res.user?.email}');
@@ -382,16 +394,17 @@ class AuthService {
           final meta = user.userMetadata ?? {};
           final metaSchoolId = meta['school_id']?.toString().trim();
           if (metaSchoolId != null && metaSchoolId.isNotEmpty) {
+            final resolvedRole = _parseRole(meta['role']?.toString());
             return UserProfileModel(
               id: user.id,
               authUserId: user.id,
               schoolId: metaSchoolId,
               schoolName: meta['school_name']?.toString() ?? 'School',
-              name: meta['full_name']?.toString() ?? user.email?.split('@').first ?? 'School Admin',
+              name: meta['full_name']?.toString() ?? user.email?.split('@').first ?? (resolvedRole.isAdministrator ? 'School Admin' : 'Faculty Member'),
               email: user.email ?? '',
-              role: _parseRole(meta['role']?.toString()),
+              role: resolvedRole,
               status: AccountStatus.active,
-              designation: meta['designation']?.toString() ?? 'Administrator',
+              designation: meta['designation']?.toString() ?? (resolvedRole.isAdministrator ? 'Administrator' : 'Class Teacher'),
               assignedClass: meta['assigned_class']?.toString(),
               assignedSection: meta['assigned_section']?.toString(),
               mustChangePassword: meta['must_change_password'] == true,
@@ -419,9 +432,11 @@ class AuthService {
     required String adminName,
     required String email,
     required String password,
+    String? schoolCode,
+    String? schoolId,
   }) async {
     await Future.delayed(const Duration(milliseconds: 350));
-    final schoolId = 'sch_${DateTime.now().millisecondsSinceEpoch}';
+    final resolvedSchoolId = schoolId ?? '6254bee9-151d-4332-8a1c-3994af7d2153';
     final trimmedEmail = email.trim().toLowerCase();
 
     if (_client != null && SupabaseConfig.isConfigured) {
@@ -455,17 +470,21 @@ class AuthService {
           if (currentUser != null) {
             try {
               debugPrint('[ONBOARDING LOG STEP 4]: Calling register_primary_school_admin RPC...');
-              final rpcRes = await _client!.rpc('register_primary_school_admin', params: {
+              final params = <String, dynamic>{
                 'p_school_name': schoolName,
                 'p_address': address,
                 'p_admin_name': adminName,
                 'p_admin_email': trimmedEmail,
-              });
+              };
+              if (schoolCode != null && schoolCode.trim().isNotEmpty) {
+                params['p_school_code'] = schoolCode.trim().toUpperCase();
+              }
+              final rpcRes = await _client!.rpc('register_primary_school_admin', params: params);
               debugPrint('[ONBOARDING LOG STEP 5]: RPC Success -> $rpcRes');
             } on PostgrestException catch (rpcErr) {
               debugPrint('[ONBOARDING LOG STEP 4 Error]: PostgrestException code=${rpcErr.code}, message=${rpcErr.message}');
-              if (rpcErr.code == '42883' || rpcErr.message.contains('does not exist') || rpcErr.code == 'PGRST202') {
-                throw Exception('School onboarding is not configured yet. Please contact the administrator.');
+              if (rpcErr.code == '42883' || rpcErr.message.contains('does not exist') || rpcErr.code == 'PGRST202' || rpcErr.code == '42703') {
+                throw Exception('School onboarding service requires Super Admin database provisioning. Please contact your platform super administrator to provision or link this campus.');
               } else {
                 throw Exception(rpcErr.message);
               }
@@ -497,7 +516,7 @@ class AuthService {
     final newOwner = UserProfileModel(
       id: 'prof_${DateTime.now().millisecondsSinceEpoch}',
       authUserId: 'auth_owner_${DateTime.now().millisecondsSinceEpoch}',
-      schoolId: schoolId,
+      schoolId: resolvedSchoolId,
       schoolName: schoolName,
       name: adminName,
       email: trimmedEmail,
@@ -580,10 +599,7 @@ class AuthService {
             .eq('school_id', schoolId)
             .or('role.eq.school_admin,role.eq.super_admin,role.eq.owner')
             .order('full_name', ascending: true);
-        if (data is List) {
-          return data.map((d) => _mapProfile(d)).toList();
-        }
-        return [];
+        return data.map((d) => _mapProfile(d)).toList();
       } catch (e) {
         debugPrint('[AuthService getAdminsForSchool Error]: $e');
         rethrow;
@@ -839,18 +855,29 @@ class AuthService {
   }
 
   UserRole _parseRole(String? roleStr) {
-    switch (roleStr?.toLowerCase()) {
+    switch (roleStr?.toLowerCase().trim()) {
       case 'owner':
+      case 'school_owner':
         return UserRole.owner;
       case 'super_admin':
       case 'superadmin':
+      case 'platform_admin':
         return UserRole.superAdmin;
       case 'school_admin':
       case 'admin':
+      case 'administrator':
+      case 'principal':
+      case 'headmaster':
         return UserRole.schoolAdmin;
       case 'staff':
+      case 'employee':
+      case 'office_staff':
+      case 'librarian':
+      case 'driver':
         return UserRole.staff;
       case 'teacher':
+      case 'class_teacher':
+      case 'subject_teacher':
       default:
         return UserRole.teacher;
     }

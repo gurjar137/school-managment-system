@@ -137,6 +137,7 @@ void main() {
       final unassignedTeacher = TeacherModel(
         id: 't_unassigned',
         employeeId: 'EMP-999',
+        schoolId: '6254bee9-151d-4332-8a1c-3994af7d2153',
         name: 'Unassigned Teacher',
         email: 'unassigned@test.com',
         subjects: const [],
@@ -151,6 +152,7 @@ void main() {
       final assignedTeacher = TeacherModel(
         id: 't_assigned',
         employeeId: 'EMP-100',
+        schoolId: '6254bee9-151d-4332-8a1c-3994af7d2153',
         name: 'Ram',
         email: 'ram@test.com',
         subjects: const [],
@@ -165,16 +167,46 @@ void main() {
       await teacherService.addTeacher(unassignedTeacher);
       await teacherService.addTeacher(assignedTeacher);
 
-      final allTeachers = await teacherService.getTeachers();
+      final allTeachers = await teacherService.getTeachers(schoolId: '6254bee9-151d-4332-8a1c-3994af7d2153');
       expect(allTeachers.any((t) => t.id == 't_unassigned'), true, reason: 'Unassigned teacher must appear in all teachers directory');
       expect(allTeachers.any((t) => t.id == 't_assigned'), true);
 
-      final classWiseMap = await teacherService.getTeachersClassWise();
+      final classWiseMap = await teacherService.getTeachersClassWise(schoolId: '6254bee9-151d-4332-8a1c-3994af7d2153');
       expect(classWiseMap.containsKey(''), false, reason: 'getTeachersClassWise drops unassigned faculty');
     });
 
     test('getTeachers returns at least 2 real teachers (Ramesh in 12-F, Ram in 5-A)', () async {
       final teacherService = TeacherService();
+      await teacherService.addTeacher(const TeacherModel(
+        id: 't_ramesh',
+        employeeId: 'EMP-0012F',
+        schoolId: '6254bee9-151d-4332-8a1c-3994af7d2153',
+        name: 'Ramesh',
+        email: 'ramesh@test.com',
+        subjects: ['Physics'],
+        assignedClass: '12',
+        assignedSection: 'F',
+        totalStudents: 0,
+        avatarUrl: '',
+        phone: '',
+        status: AccountStatus.active,
+        designation: 'Senior Faculty',
+      ));
+      await teacherService.addTeacher(const TeacherModel(
+        id: 't_ram',
+        employeeId: 'EMP-005A',
+        schoolId: '6254bee9-151d-4332-8a1c-3994af7d2153',
+        name: 'Ram',
+        email: 'ram@test.com',
+        subjects: ['Mathematics'],
+        assignedClass: '5',
+        assignedSection: 'A',
+        totalStudents: 0,
+        avatarUrl: '',
+        phone: '',
+        status: AccountStatus.active,
+        designation: 'Teacher',
+      ));
       final list = await teacherService.getTeachers(schoolId: '6254bee9-151d-4332-8a1c-3994af7d2153');
       expect(list.length, greaterThanOrEqualTo(2));
       final ramesh = list.firstWhere((t) => t.name.toLowerCase().contains('ramesh'));

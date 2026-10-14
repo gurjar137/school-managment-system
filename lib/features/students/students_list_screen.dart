@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/reusable_widgets.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../data/models/student_model.dart';
@@ -31,6 +32,7 @@ class _StudentsListScreenState extends ConsumerState<StudentsListScreen> {
   Timer? _debounceTimer;
 
   final List<String> _directoryClasses = List.generate(12, (i) => 'Class ${i + 1}');
+  Map<String, int> _classStudentCounts = {};
   int _totalStudentCount = 0;
   int _activeAyStudentCount = 0;
 
@@ -83,19 +85,25 @@ class _StudentsListScreenState extends ConsumerState<StudentsListScreen> {
     final schoolId = (activeProfile?.schoolId != null && activeProfile!.schoolId.isNotEmpty)
         ? activeProfile.schoolId
         : (user?.schoolId ?? '');
-    final studentService = ref.read(studentServiceProvider);
+    final repo = ref.read(schoolRepositoryProvider);
 
     try {
-      final total = await studentService.getStudentCount(schoolId: schoolId);
-      final activeAy = await studentService.getStudentCount(
+      final total = await repo.getStudentCount(schoolId: schoolId);
+      final activeAy = await repo.getStudentCount(
         schoolId: schoolId,
         academicYearId: _selectedAcademicYearId,
         status: AccountStatus.active,
+      );
+      final classCounts = await repo.getClassStudentCounts(
+        classNames: _directoryClasses,
+        schoolId: schoolId,
+        academicYearId: _selectedAcademicYearId,
       );
       if (mounted) {
         setState(() {
           _totalStudentCount = total;
           _activeAyStudentCount = activeAy;
+          _classStudentCounts = classCounts;
         });
       }
     } catch (e) {
@@ -331,6 +339,69 @@ class _StudentsListScreenState extends ConsumerState<StudentsListScreen> {
     );
   }
 
+  Widget _buildClassDirectoryStrip(bool isDark) {
+    if (_classStudentCounts.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      height: 60,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        scrollDirection: Axis.horizontal,
+        itemCount: _directoryClasses.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final c = _directoryClasses[index];
+          final count = _classStudentCounts[c] ?? 0;
+          final isSelected = _selectedClass == c;
+
+          return InkWell(
+            onTap: () {
+              setState(() {
+                _selectedClass = isSelected ? 'All' : c;
+              });
+              _loadStudents(reset: true);
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppColors.softLavender.withValues(alpha: 0.15)
+                    : (isDark ? AppColors.darkSurface : AppColors.pureWhite),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isSelected ? AppColors.softLavender : AppColors.borderLight,
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    c,
+                    style: AppTypography.labelMedium.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: isSelected ? AppColors.softLavender : null,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$count Students',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.coolGray,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildFilterBar(bool isTeacher) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -479,6 +550,8 @@ class _StudentsListScreenState extends ConsumerState<StudentsListScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const AppBackButton(fallbackPath: '/home'),
+        leadingWidth: 96.0,
         title: Text(
           isTeacher ? 'My Class ${user?.assignedClass ?? ""} Roster' : 'Campus Student Directory',
           style: AppTypography.titleLarge,
@@ -500,6 +573,9 @@ class _StudentsListScreenState extends ConsumerState<StudentsListScreen> {
         children: [
           // Header Metrics (Total Students & Active AY Students)
           if (!isTeacher) _buildHeaderMetricBadges(isDark),
+
+          // Class Directory Cards Strip
+          if (!isTeacher) _buildClassDirectoryStrip(isDark),
 
           // Search Header
           Padding(

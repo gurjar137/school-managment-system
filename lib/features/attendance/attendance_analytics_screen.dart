@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/student_model.dart';
 
 class AttendanceAnalyticsScreen extends ConsumerStatefulWidget {
@@ -79,11 +80,12 @@ class _AttendanceAnalyticsScreenState extends ConsumerState<AttendanceAnalyticsS
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final classNames = _classAttendanceRates.keys.toList();
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/attendance'),
         title: Text('Attendance Analytics', style: AppTypography.titleLarge),
         actions: [
           IconButton(

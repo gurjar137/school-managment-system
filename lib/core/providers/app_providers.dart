@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../utils/teacher_assignment_parser.dart';
@@ -28,7 +30,6 @@ import '../../data/services/transport_service.dart';
 import '../../data/models/school_app_access_state.dart';
 import '../../data/services/tenant_access_service.dart';
 import '../../data/services/academic_year_service.dart';
-import '../errors/exceptions.dart';
 export 'timetable_providers.dart';
 
 // Supabase Client Provider
@@ -45,6 +46,7 @@ final tenantAccessServiceProvider = Provider<TenantAccessService>((ref) {
 });
 
 final appAccessStateProvider = FutureProvider<AppAccessResult>((ref) async {
+  ref.watch(authProvider);
   final service = ref.watch(tenantAccessServiceProvider);
   return await service.validateCurrentSession();
 });
@@ -151,7 +153,13 @@ final adminDashboardMetricsProvider = FutureProvider<AdminDashboardMetrics>((ref
   final ayRec = await studentService.fetchActiveAcademicYearRecord(schoolId);
   final ayId = (ayRec?['id'] as String?) ?? '';
   final classes = ayId.isNotEmpty ? await studentService.fetchClasses(schoolId, ayId) : <dynamic>[];
-  final totalClasses = classes.length;
+  int totalClasses = classes.length;
+  if (totalClasses == 0 && schoolId.isNotEmpty) {
+    try {
+      final distinct = await studentService.fetchDistinctClassNames(schoolId: schoolId);
+      totalClasses = distinct.length;
+    } catch (_) {}
+  }
 
   // 4. Fetch Teachers
   final teachers = await teacherService.getTeachers(schoolId: schoolId);
@@ -167,8 +175,15 @@ final adminDashboardMetricsProvider = FutureProvider<AdminDashboardMetrics>((ref
   final disabledTeachers = teachers.where((t) => t.status != AccountStatus.active).length;
 
   final assignments = await teacherService.getTeacherAssignments(schoolId: schoolId);
+  final assignedClasses = assignments.map((a) => a.className).toSet().toList();
+  assignedClasses.sort((a, b) {
+    final numA = int.tryParse(a.replaceAll(RegExp(r'[^0-9]'), '')) ?? 999;
+    final numB = int.tryParse(b.replaceAll(RegExp(r'[^0-9]'), '')) ?? 999;
+    final cmp = numA.compareTo(numB);
+    return cmp != 0 ? cmp : a.compareTo(b);
+  });
   final teacherDirectorySubtitle = assignments.isNotEmpty
-      ? 'View assigned class teachers for ${assignments.map((a) => a.className).toSet().join(", ")}'
+      ? 'View assigned class teachers for ${assignedClasses.join(", ")}'
       : 'No class-teacher assignments yet';
 
   return AdminDashboardMetrics(
@@ -261,9 +276,17 @@ final authServiceProvider = Provider<AuthService>((ref) {
 // Auth State
 class AuthNotifier extends StateNotifier<UserModel?> {
   UserProfileModel? _activeProfile;
+  StreamSubscription<AuthState>? _authSub;
 
   AuthNotifier() : super(SupabaseConfig.isConfigured ? null : MockData.currentAdminUser) {
     _listenAuthChanges();
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    _authSub = null;
+    super.dispose();
   }
 
   void _listenAuthChanges() {
@@ -274,13 +297,20 @@ class AuthNotifier extends StateNotifier<UserModel?> {
         if (client.auth.currentUser != null) {
           _restoreUser(client.auth.currentUser);
         }
-        client.auth.onAuthStateChange.listen((data) {
+        _authSub = client.auth.onAuthStateChange.listen((data) {
+          if (!mounted) return;
           debugPrint('[AuthNotifier onAuthStateChange]: event=${data.event}, user=${data.session?.user.email}');
           if (data.session?.user != null) {
             _restoreUser(data.session?.user);
           } else {
+            final hadProfile = _activeProfile != null || state != null;
             _activeProfile = null;
-            state = null;
+            if (mounted) {
+              state = null;
+            }
+            if (hadProfile) {
+              clearLocalSchoolCaches();
+            }
           }
         });
       }
@@ -292,26 +322,35 @@ class AuthNotifier extends StateNotifier<UserModel?> {
   void _restoreUser(User? user) async {
     if (user == null) {
       _activeProfile = null;
-      state = null;
+      if (mounted) state = null;
       return;
     }
+    if (!mounted) return;
     debugPrint('[AuthNotifier _restoreUser]: ${user.email}, metadata=${user.userMetadata}');
       
-      // Check database public.profiles first as primary source of truth
-      try {
-        final authService = AuthService();
-        final dbProfile = await authService.fetchUserProfile(user.id);
-        if (dbProfile != null) {
-          if (dbProfile.status != AccountStatus.active) {
-            debugPrint('[AuthNotifier _restoreUser]: User profile status is ${dbProfile.status}, signing out');
-            _activeProfile = null;
-            state = null;
-            if (SupabaseConfig.isConfigured) {
-              await Supabase.instance.client.auth.signOut();
-            }
-            return;
+    // Check database public.profiles first as primary source of truth
+    try {
+      final authService = AuthService();
+      final dbProfile = await authService.fetchUserProfile(user.id);
+      if (!mounted) return;
+      if (SupabaseConfig.isConfigured) {
+        final currentId = Supabase.instance.client.auth.currentUser?.id;
+        if (currentId == null || currentId != user.id) {
+          debugPrint('[AuthNotifier _restoreUser]: User signed out or changed during fetch, skipping update.');
+          return;
+        }
+      }
+      if (dbProfile != null) {
+        if (dbProfile.status != AccountStatus.active) {
+          debugPrint('[AuthNotifier _restoreUser]: User profile status is ${dbProfile.status}, signing out');
+          _activeProfile = null;
+          if (mounted) state = null;
+          if (SupabaseConfig.isConfigured) {
+            await Supabase.instance.client.auth.signOut();
           }
-          debugPrint('[AuthNotifier _restoreUser]: Restored profile from DB: ${dbProfile.email}, role: ${dbProfile.role}');
+          return;
+        }
+        debugPrint('[AuthNotifier _restoreUser]: Restored profile from DB: ${dbProfile.email}, role: ${dbProfile.role}');
 
           final meta = user.userMetadata ?? {};
           final metaClass = meta['assigned_class'] ?? meta['class'];
@@ -340,17 +379,26 @@ class AuthNotifier extends StateNotifier<UserModel?> {
             assignedSection: effectiveSection,
           );
 
+          if (!mounted) return;
           setUserProfile(fullProfile);
           return;
         } else if (SupabaseConfig.isConfigured) {
           debugPrint('[AuthNotifier _restoreUser]: User authenticated but no profile found in database, signing out');
           _activeProfile = null;
-          state = null;
+          if (mounted) state = null;
           await Supabase.instance.client.auth.signOut();
           return;
         }
       } catch (e) {
         debugPrint('[AuthNotifier _restoreUser DB fetch notice]: $e');
+      }
+
+      if (!mounted) return;
+      if (SupabaseConfig.isConfigured) {
+        final currentId = Supabase.instance.client.auth.currentUser?.id;
+        if (currentId == null || currentId != user.id) {
+          return;
+        }
       }
 
       final meta = user.userMetadata ?? {};
@@ -379,13 +427,26 @@ class AuthNotifier extends StateNotifier<UserModel?> {
         subject: meta['subject']?.toString(),
         createdAt: DateTime.now(),
       );
-      setUserProfile(profile);
+      if (mounted) {
+        setUserProfile(profile);
+      }
+  }
+
+  Future<void> refreshProfile() async {
+    if (SupabaseConfig.isConfigured) {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        _restoreUser(user);
+      }
+    }
   }
 
   UserProfileModel? get activeProfile => _activeProfile;
 
   void setUserProfile(UserProfileModel profile) {
+    final oldSchoolId = _activeProfile?.schoolId;
     _activeProfile = profile;
+    if (!mounted) return;
     state = UserModel(
       id: profile.id,
       schoolId: profile.schoolId,
@@ -401,6 +462,9 @@ class AuthNotifier extends StateNotifier<UserModel?> {
       totalStudentsInClass: 0,
       status: profile.status,
     );
+    if (oldSchoolId != null && oldSchoolId.isNotEmpty && oldSchoolId != profile.schoolId) {
+      clearLocalSchoolCaches();
+    }
   }
 
   void login(UserRole role) {
@@ -408,6 +472,7 @@ class AuthNotifier extends StateNotifier<UserModel?> {
       debugPrint('[AuthNotifier]: Mock login ignored because Supabase is configured.');
       return;
     }
+    if (!mounted) return;
     if (role.isAdministrator) {
       state = MockData.currentAdminUser;
     } else if (role == UserRole.teacher) {
@@ -425,15 +490,39 @@ class AuthNotifier extends StateNotifier<UserModel?> {
     }
   }
 
-  void logout() async {
+  Future<void> logout() async {
     _activeProfile = null;
-    state = null;
+    if (mounted) {
+      state = null;
+    }
+    await clearLocalSchoolCaches();
     if (SupabaseConfig.isConfigured) {
       try {
         await Supabase.instance.client.auth.signOut();
       } catch (e) {
         debugPrint('[AuthNotifier signOut notice]: $e');
       }
+    }
+  }
+
+  static Future<void> clearLocalSchoolCaches() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+      for (final k in keys) {
+        if (k.startsWith('cached_')) {
+          await prefs.remove(k);
+        }
+      }
+      await prefs.remove('cached_students_data');
+      await prefs.remove('cached_teachers_data');
+      await prefs.remove('cached_parents_data');
+      await prefs.remove('cached_links_data');
+      await prefs.remove('cached_books_data');
+      await prefs.remove('cached_transport_routes');
+      await prefs.remove('cached_salary_data');
+    } catch (e) {
+      debugPrint('[clearLocalSchoolCaches warning]: $e');
     }
   }
 }
@@ -466,7 +555,10 @@ final teacherStudentCountProvider = FutureProvider<int>((ref) async {
   final schoolId = (userSchoolId != null && userSchoolId.isNotEmpty)
       ? userSchoolId
       : await studentService.fetchActiveSchoolId();
-  final academicYearId = await studentService.fetchActiveAcademicYearId(schoolId);
+  String? academicYearId;
+  try {
+    academicYearId = await studentService.fetchActiveAcademicYearId(schoolId);
+  } catch (_) {}
   return await studentService.getStudentCount(
     schoolId: schoolId,
     academicYearId: academicYearId,
@@ -552,6 +644,7 @@ class AttendanceBoardNotifier extends StateNotifier<AttendanceBoardState> {
   final AttendanceService _attendanceService;
   final StudentService _studentService;
   final MockAttendanceRepository? _repo;
+  final bool _isLocked;
   String _lastErrorMessage = '';
 
   String get lastErrorMessage => _lastErrorMessage;
@@ -563,9 +656,11 @@ class AttendanceBoardNotifier extends StateNotifier<AttendanceBoardState> {
     required String assignedClass,
     required String assignedSection,
     int initialTotalCount = 0,
+    bool? isLocked,
   })  : _attendanceService = attendanceService,
         _studentService = studentService,
         _repo = repo,
+        _isLocked = isLocked ?? (assignedClass == '12' && assignedSection == 'F'),
         super(AttendanceBoardState(
           selectedClass: assignedClass,
           selectedSection: assignedSection,
@@ -580,6 +675,7 @@ class AttendanceBoardNotifier extends StateNotifier<AttendanceBoardState> {
         ));
 
   void setClassAndSection(String className, String section) {
+    if (_isLocked) return;
     state = state.copyWith(
       selectedClass: className,
       selectedSection: section,
@@ -664,15 +760,25 @@ class AttendanceBoardNotifier extends StateNotifier<AttendanceBoardState> {
     String? schoolId,
     String? academicYearId,
   }) async {
+    if (!mounted) return;
     state = state.copyWith(isLoadingSummary: true);
     final dateStr = '${state.selectedDate.year.toString().padLeft(4, '0')}-${state.selectedDate.month.toString().padLeft(2, '0')}-${state.selectedDate.day.toString().padLeft(2, '0')}';
 
     final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
         ? schoolId
         : await _studentService.fetchActiveSchoolId();
-    final effectiveAyId = (academicYearId != null && academicYearId.isNotEmpty)
-        ? academicYearId
-        : await _studentService.fetchActiveAcademicYearId(effectiveSchoolId);
+    String? effectiveAyId = academicYearId;
+    if (effectiveAyId == null || effectiveAyId.isEmpty) {
+      try {
+        effectiveAyId = await _studentService.fetchActiveAcademicYearId(effectiveSchoolId);
+      } catch (_) {}
+    }
+
+    if (effectiveAyId == null || effectiveAyId.isEmpty) {
+      debugPrint('[AttendanceBoardNotifier] No active academic year for school $effectiveSchoolId; attendance summary deferred.');
+      state = state.copyWith(isLoadingSummary: false);
+      return;
+    }
 
     try {
       final summary = await _attendanceService.getClassDailyAttendanceSummary(
@@ -689,6 +795,7 @@ class AttendanceBoardNotifier extends StateNotifier<AttendanceBoardState> {
         total = state.totalClassStudents;
       }
 
+      if (!mounted) return;
       state = state.copyWith(
         totalClassStudents: total,
         attendanceMap: Map<String, AttendanceStatus>.from(summary.attendanceMap),
@@ -697,6 +804,7 @@ class AttendanceBoardNotifier extends StateNotifier<AttendanceBoardState> {
       );
     } catch (e) {
       debugPrint('[AttendanceBoardNotifier loadClassAttendanceSummary Error]: $e');
+      if (!mounted) return;
       state = state.copyWith(isLoadingSummary: false);
     }
   }
@@ -726,6 +834,7 @@ class AttendanceBoardNotifier extends StateNotifier<AttendanceBoardState> {
       if (total == 0) {
         total = students.length;
       }
+      if (!mounted) return;
       state = state.copyWith(totalClassStudents: total, attendanceMap: currentMap);
     }
   }
@@ -738,17 +847,27 @@ class AttendanceBoardNotifier extends StateNotifier<AttendanceBoardState> {
     try {
       final dateStr = '${state.selectedDate.year.toString().padLeft(4, '0')}-${state.selectedDate.month.toString().padLeft(2, '0')}-${state.selectedDate.day.toString().padLeft(2, '0')}';
       final defaultSchoolId = await _studentService.fetchActiveSchoolId();
-      final defaultAyId = await _studentService.fetchActiveAcademicYearId(defaultSchoolId);
+      String? defaultAyId;
+      try {
+        defaultAyId = await _studentService.fetchActiveAcademicYearId(defaultSchoolId);
+      } catch (_) {}
+
       if (defaultAyId == null || defaultAyId.isEmpty) {
-        throw const AcademicYearResolutionException('Unable to resolve active academic year for school');
+        _lastErrorMessage = 'No active academic year is configured for this school. Please configure an academic year in School Settings before recording attendance.';
+        state = state.copyWith(isSaving: false);
+        return false;
       }
 
       final studentMap = {for (var s in assignedStudents) s.id: s};
       final upsertPayloads = <Map<String, dynamic>>[];
       final committedMap = Map<String, AttendanceStatus>.from(state.attendanceMap);
 
+      if (assignedStudents.isNotEmpty) {
+        committedMap.removeWhere((sId, _) => !studentMap.containsKey(sId));
+      }
+
       // Save all explicitly marked students in attendanceMap
-      for (final entry in state.attendanceMap.entries) {
+      for (final entry in committedMap.entries) {
         final sId = entry.key;
         final statusEnum = entry.value;
 

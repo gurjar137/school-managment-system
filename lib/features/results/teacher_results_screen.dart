@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/result_models.dart';
 
 class TeacherResultsScreen extends ConsumerStatefulWidget {
@@ -26,6 +27,8 @@ class _TeacherResultsScreenState extends ConsumerState<TeacherResultsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/home'),
         title: Text('Assigned Tests & Exams', style: AppTypography.titleLarge),
       ),
       body: ListView(

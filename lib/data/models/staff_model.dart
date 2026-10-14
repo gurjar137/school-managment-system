@@ -37,14 +37,15 @@ class StaffMemberModel {
 
   bool get isTeacher => role == UserRole.teacher;
   bool get isStaff => role == UserRole.staff;
+  bool get isAdministrator => role.isAdministrator;
   bool get isActive => status == AccountStatus.active;
 
   String get displayAssignment {
-    if (!isTeacher) return 'N/A (Staff)';
+    if (!isTeacher) return designation.isNotEmpty ? designation : 'N/A (Staff)';
     final cls = assignedClass ?? '';
     final sec = assignedSection ?? '';
     if (cls.isEmpty && sec.isEmpty) return 'Not Assigned';
-    if (cls.isNotEmpty && sec.isNotEmpty) return ' - ';
+    if (cls.isNotEmpty && sec.isNotEmpty) return '$cls - $sec';
     return cls.isNotEmpty ? cls : sec;
   }
 
@@ -57,6 +58,7 @@ class StaffMemberModel {
     String? assignedSection,
     AccountStatus? status,
     DateTime? updatedAt,
+    UserRole? role,
   }) {
     return StaffMemberModel(
       id: id,
@@ -66,7 +68,7 @@ class StaffMemberModel {
       name: name ?? this.name,
       email: email,
       phone: phone ?? this.phone,
-      role: role,
+      role: role ?? this.role,
       designation: designation ?? this.designation,
       subject: subject ?? this.subject,
       assignedClass: assignedClass ?? this.assignedClass,
@@ -79,7 +81,14 @@ class StaffMemberModel {
 
   factory StaffMemberModel.fromJson(Map<String, dynamic> json) {
     final roleStr = (json['role']?.toString() ?? 'teacher').toLowerCase();
-    final role = roleStr.contains('staff') ? UserRole.staff : UserRole.teacher;
+    UserRole role;
+    if (roleStr.contains('admin') || roleStr.contains('principal') || roleStr.contains('owner')) {
+      role = UserRole.schoolAdmin;
+    } else if (roleStr.contains('staff') || roleStr.contains('clerk') || roleStr.contains('accountant')) {
+      role = UserRole.staff;
+    } else {
+      role = UserRole.teacher;
+    }
 
     final statusStr = (json['status']?.toString() ?? 'active').toLowerCase();
     final status = (statusStr == 'inactive' || statusStr == 'suspended')

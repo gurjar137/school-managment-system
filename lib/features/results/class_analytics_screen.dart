@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/result_models.dart';
 
 class ClassAnalyticsScreen extends ConsumerStatefulWidget {
@@ -25,6 +26,8 @@ class _ClassAnalyticsScreenState extends ConsumerState<ClassAnalyticsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: const AppBackButton(fallbackPath: '/results'),
         title: Text('Class Performance Analytics', style: AppTypography.titleLarge),
         actions: [
           IconButton(

@@ -1,6 +1,5 @@
 import 'dart:async';
 import '../models/student_model.dart';
-import '../mock/mock_data.dart';
 
 class AttendanceSyncQueueItem {
   final String studentId;

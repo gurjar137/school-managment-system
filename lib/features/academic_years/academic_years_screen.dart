@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/reusable_widgets.dart';
 import '../../data/models/class_section_models.dart';
 import '../../data/models/user_model.dart';
@@ -70,7 +71,7 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _AcademicYearDialog(
+      builder: (ctx) => AcademicYearDialog(
         title: 'Create Academic Year',
         submitLabel: 'Create Year',
         existingYears: _years,
@@ -105,7 +106,7 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _AcademicYearDialog(
+      builder: (ctx) => AcademicYearDialog(
         title: 'Edit Academic Year',
         submitLabel: 'Save Changes',
         existingYears: _years,
@@ -309,6 +310,8 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const AppBackButton(fallbackPath: '/settings'),
+        leadingWidth: 96.0,
         title: Text('Academic Years', style: AppTypography.titleLarge),
         actions: [
           IconButton(
@@ -566,14 +569,15 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
   }
 }
 
-class _AcademicYearDialog extends StatefulWidget {
+class AcademicYearDialog extends StatefulWidget {
   final String title;
   final String submitLabel;
   final List<AcademicYearModel> existingYears;
   final AcademicYearModel? initialModel;
   final Future<void> Function(String name, DateTime start, DateTime end, AccountStatus status) onSubmit;
 
-  const _AcademicYearDialog({
+  const AcademicYearDialog({
+    super.key,
     required this.title,
     required this.submitLabel,
     required this.existingYears,
@@ -582,10 +586,10 @@ class _AcademicYearDialog extends StatefulWidget {
   });
 
   @override
-  State<_AcademicYearDialog> createState() => _AcademicYearDialogState();
+  State<AcademicYearDialog> createState() => _AcademicYearDialogState();
 }
 
-class _AcademicYearDialogState extends State<_AcademicYearDialog> {
+class _AcademicYearDialogState extends State<AcademicYearDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameCtrl;
   DateTime? _startDate;

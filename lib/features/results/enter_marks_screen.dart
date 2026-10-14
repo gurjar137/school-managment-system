@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../data/models/result_models.dart';
 import '../../data/services/grade_service.dart';
 
@@ -222,7 +223,10 @@ class _EnterMarksScreenState extends ConsumerState<EnterMarksScreen> {
 
     if (_results.isEmpty) {
       return Scaffold(
-        appBar: AppBar(),
+        appBar: AppBar(
+          leadingWidth: AppBackButton.leadingWidth,
+          leading: const AppBackButton(fallbackPath: '/results'),
+        ),
         body: const EmptyStateWidget(icon: Icons.people_outline, title: 'No Students Found', message: 'No student roster associated with this exam.'),
       );
     }
@@ -234,6 +238,17 @@ class _EnterMarksScreenState extends ConsumerState<EnterMarksScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: AppBackButton.leadingWidth,
+        leading: AppBackButton(
+          fallbackPath: '/results',
+          onBeforeBack: () async {
+            return await showDiscardChangesDialog(
+              context,
+              title: 'Leave Marks Entry?',
+              message: 'Make sure your current draft is saved. Are you sure you want to go back to examinations?',
+            );
+          },
+        ),
         title: Text('Class 8-A Marks Entry Board', style: AppTypography.titleLarge),
         actions: [
           IconButton(

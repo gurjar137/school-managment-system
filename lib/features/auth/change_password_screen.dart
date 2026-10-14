@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../data/services/auth_service.dart';
+import '../../core/widgets/app_back_button.dart';
 
 class ChangePasswordScreen extends ConsumerStatefulWidget {
   final bool isFirstLogin;
@@ -60,6 +61,9 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
         isFirstLogin: widget.isFirstLogin,
       );
 
+      await ref.read(authProvider.notifier).refreshProfile();
+      ref.invalidate(appAccessStateProvider);
+
       final currentProfile = ref.read(authProvider.notifier).activeProfile;
       if (currentProfile != null) {
         ref.read(authProvider.notifier).setUserProfile(
@@ -113,11 +117,12 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
         ),
         backgroundColor: AppColors.midnightNavy,
         automaticallyImplyLeading: !widget.isFirstLogin,
+        leadingWidth: widget.isFirstLogin ? null : AppBackButton.leadingWidth,
         leading: widget.isFirstLogin
             ? null
-            : IconButton(
-                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                onPressed: () => context.pop(),
+            : const AppBackButton(
+                fallbackPath: '/home',
+                color: Colors.white,
               ),
       ),
       body: Center(

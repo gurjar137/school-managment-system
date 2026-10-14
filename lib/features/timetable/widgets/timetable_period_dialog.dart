@@ -135,6 +135,8 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
       academicYearId: widget.academicYearId,
       classId: _selectedClassId,
       sectionId: _selectedSectionId,
+      classDisplayCode: selectedClass?.displayCode ?? widget.initialEntry?.classDisplayCode,
+      sectionDisplayCode: selectedSection?.displayCode ?? widget.initialEntry?.sectionDisplayCode,
       className: selectedClass?.name ?? widget.initialEntry?.className,
       sectionName: selectedSection?.name ?? widget.initialEntry?.sectionName,
       dayOfWeek: _selectedDay,

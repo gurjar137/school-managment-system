@@ -8,6 +8,8 @@ import '../../core/providers/app_providers.dart';
 import '../../data/models/student_model.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/class_section_models.dart';
+import '../../core/widgets/app_back_button.dart';
+import '../academic_years/academic_years_screen.dart';
 
 class AddStudentScreen extends ConsumerStatefulWidget {
   final String? classId;
@@ -477,14 +479,17 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.midnightNavy),
-          onPressed: () {
-            if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-            } else {
-              context.go('/students');
+        AppBackButton(
+          fallbackPath: '/students',
+          onBeforeBack: () async {
+            final isDirty = _firstNameController.text.isNotEmpty ||
+                _lastNameController.text.isNotEmpty ||
+                _parentPhoneController.text.isNotEmpty ||
+                _emailController.text.isNotEmpty;
+            if (isDirty) {
+              return await showDiscardChangesDialog(context);
             }
+            return true;
           },
         ),
         const SizedBox(width: 8),
@@ -627,6 +632,57 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.softLavender,
+                      foregroundColor: AppColors.pureWhite,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.add_rounded, size: 16),
+                    label: const Text('Configure Academic Year', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                    onPressed: () {
+                      final user = ref.read(authProvider);
+                      final activeProfile = ref.read(authProvider.notifier).activeProfile;
+                      final schoolId = (activeProfile?.schoolId != null && activeProfile!.schoolId.isNotEmpty)
+                          ? activeProfile.schoolId
+                          : (user?.schoolId ?? '');
+
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (ctx) => AcademicYearDialog(
+                          title: 'Configure Academic Year',
+                          submitLabel: 'Create & Activate',
+                          existingYears: _availableAcademicYears,
+                          onSubmit: (name, start, end, status) async {
+                            final created = await ref.read(academicYearServiceProvider).createAcademicYear(
+                              schoolId: schoolId,
+                              name: name,
+                              startDate: start,
+                              endDate: end,
+                              status: status,
+                            );
+
+                            await _loadAcademicYears();
+                            if (mounted) {
+                              setState(() {
+                                _selectedAcademicYearId = created.id;
+                                _hasNoActiveAcademicYear = false;
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  backgroundColor: AppColors.mutedGreen,
+                                  content: Text('Academic Year "${created.name}" configured and selected!'),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

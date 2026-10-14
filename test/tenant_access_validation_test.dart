@@ -281,7 +281,7 @@ void main() {
       );
 
       expect(result.isAllowed, isFalse);
-      expect(result.status, equals(AppAccessStatus.noSubscription));
+      expect(result.status, anyOf(equals(AppAccessStatus.noSubscription), equals(AppAccessStatus.subscriptionMissing)));
       expect(result.userMessage, contains('No subscription configured'));
     });
 

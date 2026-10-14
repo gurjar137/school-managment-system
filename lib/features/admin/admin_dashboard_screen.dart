@@ -100,9 +100,11 @@ class AdminDashboardScreen extends ConsumerWidget {
                       IconButton(
                         icon: const Icon(Icons.logout_rounded, color: AppColors.softCoral, size: 22),
                         tooltip: 'Log Out & Switch Role',
-                        onPressed: () {
-                          ref.read(authProvider.notifier).logout();
-                          context.go('/role-selection');
+                        onPressed: () async {
+                          await ref.read(authProvider.notifier).logout();
+                          if (context.mounted) {
+                            context.go('/role-selection');
+                          }
                         },
                       ),
                     ],
