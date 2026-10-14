@@ -41,8 +41,18 @@ class TenantResolver {
       return 'offline_mock_school';
     }
 
-    final effectiveClient = client ?? (SupabaseConfig.isConfigured ? Supabase.instance.client : null);
+    SupabaseClient? safeClient;
+    try {
+      if (SupabaseConfig.isConfigured) {
+        safeClient = Supabase.instance.client;
+      }
+    } catch (_) {}
+
+    final effectiveClient = client ?? safeClient;
     if (effectiveClient == null) {
+      if (!kReleaseMode && cleanRequested != null && cleanRequested.isNotEmpty) {
+        return cleanRequested;
+      }
       throw const TenantResolutionException(
         'Database client is not initialized. Please restart the application.',
       );

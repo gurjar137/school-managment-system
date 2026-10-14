@@ -117,7 +117,7 @@ class _AdminFeeManagementScreenState extends ConsumerState<AdminFeeManagementScr
         ? activeProfile.schoolId
         : (userSchoolId != null && userSchoolId.isNotEmpty
             ? userSchoolId
-            : '6254bee9-151d-4332-8a1c-3994af7d2153');
+            : '');
 
     return Scaffold(
       key: ValueKey('fee_screen_$_refreshKey'),

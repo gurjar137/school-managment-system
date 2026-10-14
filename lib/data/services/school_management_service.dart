@@ -9,6 +9,8 @@ import '../models/user_model.dart';
 import 'student_service.dart';
 import 'teacher_service.dart';
 
+import 'tenant_resolver.dart';
+
 class SchoolManagementService {
   SupabaseClient? get _client {
     try {
@@ -20,25 +22,10 @@ class SchoolManagementService {
   }
 
   Future<String?> resolveActiveSchoolId([String? schoolId]) async {
-    if (schoolId != null && schoolId.isNotEmpty) return schoolId;
-    final client = _client;
-    if (client != null && client.auth.currentUser != null) {
-      try {
-        final profile = await client
-            .from('profiles')
-            .select('school_id')
-            .eq('auth_user_id', client.auth.currentUser!.id)
-            .maybeSingle();
-        if (profile != null && profile['school_id'] != null) {
-          return profile['school_id'].toString();
-        }
-        final metaId = client.auth.currentUser!.userMetadata?['school_id'];
-        if (metaId != null && metaId.toString().isNotEmpty) {
-          return metaId.toString();
-        }
-      } catch (_) {}
-    }
-    return '6254bee9-151d-4332-8a1c-3994af7d2153';
+    return TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: schoolId,
+    );
   }
 
   StudentModel _mapSupabaseToStudentModel(Map<String, dynamic> data) {

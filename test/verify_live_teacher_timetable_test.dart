@@ -15,8 +15,8 @@ class RealHttpOverrides extends HttpOverrides {}
 void main() {
   const kpsSchoolId = '6254bee9-151d-4332-8a1c-3994af7d2153';
   const greenwoodSchoolId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
-  const adminEmail = 'admin_greenwood@testschool.edu';
-  const adminPassword = 'GreenwoodPass123!';
+  const adminEmail = 'test.teacher.1a@school-test.local';
+  const adminPassword = 'TestPass123!';
 
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();

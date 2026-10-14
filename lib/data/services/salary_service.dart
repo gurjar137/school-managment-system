@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/salary_models.dart';
 import '../models/academic_models.dart';
 import '../../core/config/supabase_config.dart';
-import '../../core/errors/exceptions.dart';
+import 'tenant_resolver.dart';
 
 class SalaryService {
   SupabaseClient? get _client {
@@ -27,23 +27,7 @@ class SalaryService {
 
   // --- RESOLVE ACTIVE SCHOOL ID ---
   Future<String> fetchActiveSchoolId() async {
-    if (_client != null && SupabaseConfig.isConfigured) {
-      final user = _client!.auth.currentUser;
-      if (user != null) {
-        try {
-          final prof = await _client!
-              .from('profiles')
-              .select('school_id')
-              .eq('auth_user_id', user.id)
-              .maybeSingle();
-          if (prof != null && prof['school_id'] != null && prof['school_id'].toString().isNotEmpty) {
-            return prof['school_id'].toString();
-          }
-        } catch (_) {}
-      }
-      throw const TenantResolutionException('Active school could not be resolved for current user. Please log in again.');
-    }
-    return 'offline_mock_school';
+    return TenantResolver.resolveActiveSchoolId(client: _client);
   }
 
   // --- PERSISTENT CACHE INITIALIZATION ---

@@ -4,10 +4,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/academic_models.dart';
 import '../../core/config/supabase_config.dart';
-import '../../core/errors/exceptions.dart';
+import 'tenant_resolver.dart';
 
 class LibraryService {
+  final SupabaseClient? _clientOverride;
+
+  LibraryService({SupabaseClient? client}) : _clientOverride = client;
+
   SupabaseClient? get _client {
+    if (_clientOverride != null) return _clientOverride;
     try {
       if (SupabaseConfig.isConfigured) {
         return Supabase.instance.client;
@@ -16,63 +21,52 @@ class LibraryService {
     return null;
   }
 
-  static const String _cacheKey = 'cached_library_books_data';
-  final List<LibraryBookModel> _cachedBooks = [];
-  bool _isCacheLoaded = false;
+  String _cacheKey(String schoolId) => 'cached_library_books_${schoolId.trim()}';
+  final Map<String, List<LibraryBookModel>> _cachedBooksBySchool = {};
 
-  Future<void> _loadCache() async {
-    if (_isCacheLoaded) return;
+  Future<void> _loadCache(String schoolId) async {
+    if (schoolId.isEmpty) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final str = prefs.getString(_cacheKey);
+      final str = prefs.getString(_cacheKey(schoolId));
       if (str != null && str.isNotEmpty) {
         final decoded = jsonDecode(str);
         if (decoded is List) {
-          _cachedBooks.clear();
+          final list = <LibraryBookModel>[];
           for (final item in decoded) {
             if (item is Map<String, dynamic>) {
-              _cachedBooks.add(LibraryBookModel.fromJson(item));
+              list.add(LibraryBookModel.fromJson(item));
             }
           }
+          _cachedBooksBySchool[schoolId] = list;
         }
       }
-      _isCacheLoaded = true;
     } catch (e) {
       debugPrint('[LibraryService Cache Load Warning]: $e');
     }
   }
 
-  Future<void> _saveCache() async {
+  Future<void> _saveCache(String schoolId) async {
+    if (schoolId.isEmpty) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_cacheKey, jsonEncode(_cachedBooks.map((b) => b.toJson()).toList()));
+      final books = _cachedBooksBySchool[schoolId] ?? [];
+      await prefs.setString(_cacheKey(schoolId), jsonEncode(books.map((b) => b.toJson()).toList()));
     } catch (e) {
       debugPrint('[LibraryService Cache Save Warning]: $e');
     }
   }
 
   Future<String> resolveActiveSchoolId([String? schoolId]) async {
-    if (schoolId != null && schoolId.isNotEmpty) return schoolId;
-    final client = _client;
-    if (client != null && client.auth.currentUser != null) {
-      try {
-        final profile = await client
-            .from('profiles')
-            .select('school_id')
-            .eq('auth_user_id', client.auth.currentUser!.id)
-            .maybeSingle();
-        if (profile != null && profile['school_id'] != null && profile['school_id'].toString().isNotEmpty) {
-          return profile['school_id'].toString();
-        }
-      } catch (_) {}
-      throw const TenantResolutionException('Active school could not be resolved for current user. Please log in again.');
-    }
-    return '6254bee9-151d-4332-8a1c-3994af7d2153';
+    return TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: schoolId,
+    );
   }
 
   Future<List<LibraryBookModel>> fetchBooks({String? schoolId}) async {
-    await _loadCache();
     final activeSchoolId = await resolveActiveSchoolId(schoolId);
+    await _loadCache(activeSchoolId);
 
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
@@ -84,23 +78,32 @@ class LibraryService {
 
         if (data.isNotEmpty) {
           final liveList = data.map((d) => LibraryBookModel.fromJson(d)).toList();
-          _cachedBooks.clear();
-          _cachedBooks.addAll(liveList);
-          await _saveCache();
+          _cachedBooksBySchool[activeSchoolId] = liveList;
+          await _saveCache(activeSchoolId);
           return liveList;
         }
+
+        // Real Supabase mode: return real rows (empty if none exist)
+        _cachedBooksBySchool[activeSchoolId] = [];
+        await _saveCache(activeSchoolId);
+        return [];
       } catch (e) {
         debugPrint('[LibraryService Supabase Fetch Warning]: $e');
+        // If genuine offline failure, return tenant cache
+        return List.unmodifiable(_cachedBooksBySchool[activeSchoolId] ?? []);
       }
     }
 
-    // If cache is still empty after DB check, initialize seed books so the catalog is ready
-    if (_cachedBooks.isEmpty) {
-      _seedInitialBooks();
-      await _saveCache();
+    // Pure offline / unconfigured mock mode ONLY
+    final currentCached = _cachedBooksBySchool[activeSchoolId] ?? [];
+    if (currentCached.isEmpty) {
+      final seeded = _generateSeedBooks();
+      _cachedBooksBySchool[activeSchoolId] = seeded;
+      await _saveCache(activeSchoolId);
+      return seeded;
     }
 
-    return List.unmodifiable(_cachedBooks);
+    return List.unmodifiable(currentCached);
   }
 
   Future<LibraryBookModel> addBook({
@@ -113,8 +116,8 @@ class LibraryService {
     DateTime? issueDate,
     DateTime? dueDate,
   }) async {
-    await _loadCache();
     final activeSchoolId = await resolveActiveSchoolId(schoolId);
+    await _loadCache(activeSchoolId);
     final bookId = 'book_${DateTime.now().millisecondsSinceEpoch}';
 
     final newBook = LibraryBookModel(
@@ -143,8 +146,8 @@ class LibraryService {
 
         if (resp != null && resp['id'] != null) {
           final persisted = LibraryBookModel.fromJson(resp);
-          _cachedBooks.add(persisted);
-          await _saveCache();
+          _cachedBooksBySchool.putIfAbsent(activeSchoolId, () => []).add(persisted);
+          await _saveCache(activeSchoolId);
           return persisted;
         }
       } catch (e) {
@@ -152,21 +155,24 @@ class LibraryService {
       }
     }
 
-    _cachedBooks.add(newBook);
-    await _saveCache();
+    _cachedBooksBySchool.putIfAbsent(activeSchoolId, () => []).add(newBook);
+    await _saveCache(activeSchoolId);
     return newBook;
   }
 
   Future<void> issueBook({
+    String? schoolId,
     required String bookId,
     required String studentName,
     required DateTime dueDate,
   }) async {
-    await _loadCache();
-    final idx = _cachedBooks.indexWhere((b) => b.id == bookId);
+    final activeSchoolId = await resolveActiveSchoolId(schoolId);
+    await _loadCache(activeSchoolId);
+    final books = _cachedBooksBySchool[activeSchoolId] ?? [];
+    final idx = books.indexWhere((b) => b.id == bookId);
     if (idx != -1) {
-      final old = _cachedBooks[idx];
-      _cachedBooks[idx] = LibraryBookModel(
+      final old = books[idx];
+      books[idx] = LibraryBookModel(
         id: old.id,
         title: old.title,
         author: old.author,
@@ -176,7 +182,7 @@ class LibraryService {
         issueDate: DateTime.now(),
         dueDate: dueDate,
       );
-      await _saveCache();
+      await _saveCache(activeSchoolId);
     }
 
     if (_client != null && SupabaseConfig.isConfigured) {
@@ -186,19 +192,21 @@ class LibraryService {
           'issued_to_student': studentName,
           'issue_date': DateTime.now().toIso8601String().split('T').first,
           'due_date': dueDate.toIso8601String().split('T').first,
-        }).eq('id', bookId);
+        }).eq('id', bookId).eq('school_id', activeSchoolId);
       } catch (e) {
         debugPrint('[LibraryService issueBook Supabase Warning]: $e');
       }
     }
   }
 
-  Future<void> returnBook(String bookId) async {
-    await _loadCache();
-    final idx = _cachedBooks.indexWhere((b) => b.id == bookId);
+  Future<void> returnBook(String bookId, {String? schoolId}) async {
+    final activeSchoolId = await resolveActiveSchoolId(schoolId);
+    await _loadCache(activeSchoolId);
+    final books = _cachedBooksBySchool[activeSchoolId] ?? [];
+    final idx = books.indexWhere((b) => b.id == bookId);
     if (idx != -1) {
-      final old = _cachedBooks[idx];
-      _cachedBooks[idx] = LibraryBookModel(
+      final old = books[idx];
+      books[idx] = LibraryBookModel(
         id: old.id,
         title: old.title,
         author: old.author,
@@ -208,7 +216,7 @@ class LibraryService {
         issueDate: null,
         dueDate: null,
       );
-      await _saveCache();
+      await _saveCache(activeSchoolId);
     }
 
     if (_client != null && SupabaseConfig.isConfigured) {
@@ -218,15 +226,15 @@ class LibraryService {
           'issued_to_student': null,
           'issue_date': null,
           'due_date': null,
-        }).eq('id', bookId);
+        }).eq('id', bookId).eq('school_id', activeSchoolId);
       } catch (e) {
         debugPrint('[LibraryService returnBook Supabase Warning]: $e');
       }
     }
   }
 
-  void _seedInitialBooks() {
-    _cachedBooks.addAll([
+  List<LibraryBookModel> _generateSeedBooks() {
+    return [
       LibraryBookModel(
         id: 'bk_001',
         title: 'A Brief History of Time',
@@ -261,6 +269,6 @@ class LibraryService {
         issueDate: DateTime.now().subtract(const Duration(days: 25)),
         dueDate: DateTime.now().subtract(const Duration(days: 5)),
       ),
-    ]);
+    ];
   }
 }

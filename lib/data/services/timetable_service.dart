@@ -3,6 +3,8 @@ import '../../core/config/supabase_config.dart';
 import '../models/timetable_model.dart';
 import 'class_section_service.dart';
 import 'academic_year_service.dart';
+import '../../core/errors/exceptions.dart';
+import 'tenant_resolver.dart';
 
 class TimetableConflictException implements Exception {
   final TimetableConflict conflict;
@@ -57,7 +59,14 @@ class TimetableService {
   List<TimetableEntryModel> get cachedEntries => List.unmodifiable(_cache);
 
   /// Resolves non-UUID display identifiers (e.g. 'cls_1', 'sec_cls_1_A') to canonical database UUIDs.
-  Future<TimetableEntryModel> resolveCanonicalEntry(TimetableEntryModel entry) async {
+  Future<TimetableEntryModel> resolveCanonicalEntry(
+    TimetableEntryModel entry, {
+    String? schoolId,
+  }) async {
+    final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
+        ? schoolId
+        : entry.schoolId.trim();
+
     String resolvedAcademicYearId = entry.academicYearId.trim();
     String? resolvedClassId = entry.classId?.trim();
     String? resolvedSectionId = entry.sectionId?.trim();
@@ -66,27 +75,35 @@ class TimetableService {
     String? resolvedClassCode = entry.classDisplayCode;
     String? resolvedSectionCode = entry.sectionDisplayCode;
 
-    // 1. Resolve Academic Year
+    // 1. Resolve Academic Year from real database records of that school
     if (resolvedAcademicYearId.isEmpty || !TimetableEntryModel.isValidUuid(resolvedAcademicYearId)) {
-      if (entry.schoolId == ClassSectionService.kpsSchoolId) {
-        resolvedAcademicYearId = ClassSectionService.kpsAcademicYearId;
-      } else {
-        try {
-          final years = await _academicYearService.fetchAcademicYears(entry.schoolId);
-          final current = years.where((y) => y.isCurrent).firstOrNull ?? years.firstOrNull;
-          if (current != null && TimetableEntryModel.isValidUuid(current.id)) {
-            resolvedAcademicYearId = current.id;
-          }
-        } catch (_) {}
+      try {
+        final years = await _academicYearService.fetchAcademicYears(effectiveSchoolId);
+        final current = years.where((y) => y.isCurrent).firstOrNull ??
+            (resolvedAcademicYearId.isNotEmpty
+                ? years.where((y) => y.name.toLowerCase() == resolvedAcademicYearId.toLowerCase() || y.id == resolvedAcademicYearId).firstOrNull
+                : null) ??
+            years.firstOrNull;
+        if (current != null && TimetableEntryModel.isValidUuid(current.id)) {
+          resolvedAcademicYearId = current.id;
+        }
+      } catch (_) {}
+    }
+
+    if (resolvedAcademicYearId.isEmpty || !TimetableEntryModel.isValidUuid(resolvedAcademicYearId)) {
+      if (_client != null && SupabaseConfig.isConfigured) {
+        throw const TimetableValidationException(
+          'No active academic year found for this school. Please configure an academic year in school settings first.',
+        );
       }
     }
 
-    // 2. Resolve Class
+    // 2. Resolve Class from real database records of that school and academic year
     if (resolvedClassId != null && resolvedClassId.isNotEmpty) {
       if (!TimetableEntryModel.isValidUuid(resolvedClassId)) {
         try {
           final resolvedClass = await _classSectionService.resolveClass(
-            schoolId: entry.schoolId,
+            schoolId: effectiveSchoolId,
             classIdentifier: resolvedClassId,
             academicYearId: resolvedAcademicYearId,
           );
@@ -99,12 +116,12 @@ class TimetableService {
       }
     }
 
-    // 3. Resolve Section
+    // 3. Resolve Section from real database records of that school and class
     if (resolvedSectionId != null && resolvedSectionId.isNotEmpty && resolvedClassId != null) {
       if (!TimetableEntryModel.isValidUuid(resolvedSectionId)) {
         try {
           final resolvedSection = await _classSectionService.resolveSection(
-            schoolId: entry.schoolId,
+            schoolId: effectiveSchoolId,
             classId: resolvedClassId,
             sectionIdentifier: resolvedSectionId,
           );
@@ -118,6 +135,7 @@ class TimetableService {
     }
 
     return entry.copyWith(
+      schoolId: effectiveSchoolId,
       academicYearId: resolvedAcademicYearId,
       classId: resolvedClassId,
       sectionId: resolvedSectionId,
@@ -277,14 +295,19 @@ class TimetableService {
     int? dayOfWeek,
     TimetableStatus? status,
   }) async {
-    final cleanSchoolId = schoolId.trim();
+    final cleanSchoolId = await TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: schoolId.trim().isNotEmpty ? schoolId.trim() : null,
+    );
     if (cleanSchoolId.isEmpty) return [];
 
     String? effectiveAy = academicYearId?.trim();
     if (effectiveAy != null && effectiveAy.isNotEmpty && !TimetableEntryModel.isValidUuid(effectiveAy)) {
-      if (cleanSchoolId == ClassSectionService.kpsSchoolId) {
-        effectiveAy = ClassSectionService.kpsAcademicYearId;
-      }
+      try {
+        final years = await _academicYearService.fetchAcademicYears(cleanSchoolId);
+        final match = years.where((y) => y.name.toLowerCase() == effectiveAy!.toLowerCase() || y.id == effectiveAy).firstOrNull;
+        if (match != null) effectiveAy = match.id;
+      } catch (_) {}
     }
 
     String? effectiveClassId = classId?.trim();
@@ -295,7 +318,7 @@ class TimetableService {
           classIdentifier: effectiveClassId,
           academicYearId: effectiveAy,
         );
-        if (resolved != null && TimetableEntryModel.isValidUuid(resolved.id)) {
+        if (resolved != null) {
           effectiveClassId = resolved.id;
         }
       } catch (_) {}
@@ -310,7 +333,7 @@ class TimetableService {
             classId: effectiveClassId,
             sectionIdentifier: effectiveSectionId,
           );
-          if (resolved != null && TimetableEntryModel.isValidUuid(resolved.id)) {
+          if (resolved != null) {
             effectiveSectionId = resolved.id;
           }
         } catch (_) {}
@@ -387,7 +410,10 @@ class TimetableService {
     String? teacherName,
     String? academicYearId,
   }) async {
-    final cleanSchoolId = schoolId.trim();
+    final cleanSchoolId = await TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: schoolId.trim().isNotEmpty ? schoolId.trim() : null,
+    );
     final cleanTeacherId = teacherProfileId.trim();
     if (cleanSchoolId.isEmpty || cleanTeacherId.isEmpty) return [];
 
@@ -434,15 +460,17 @@ class TimetableService {
 
   /// Create a new timetable entry with pre-insert conflict validation.
   Future<TimetableEntryModel> createEntry(TimetableEntryModel entry) async {
-    if (entry.schoolId.trim().isEmpty) {
-      throw const TimetableValidationException('School ID is required.');
-    }
+    final authorizedSchoolId = await TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: entry.schoolId.trim().isNotEmpty ? entry.schoolId.trim() : null,
+    );
+
     if (entry.subjectName.trim().isEmpty) {
       throw const TimetableValidationException('Subject name cannot be empty.');
     }
 
     // Resolve class, section, and academic year to canonical database UUIDs
-    final resolved = await resolveCanonicalEntry(entry);
+    final resolved = await resolveCanonicalEntry(entry, schoolId: authorizedSchoolId);
 
     if (resolved.academicYearId.trim().isEmpty) {
       throw const TimetableValidationException('Academic Year ID is required.');
@@ -516,14 +544,30 @@ class TimetableService {
       throw const TimetableValidationException('Entry ID is required for update.');
     }
 
+    final authorizedSchoolId = await TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: entry.schoolId.trim().isNotEmpty ? entry.schoolId.trim() : null,
+    );
+
     // Resolve class, section, and academic year to canonical database UUIDs
-    final resolved = await resolveCanonicalEntry(entry);
+    final resolved = await resolveCanonicalEntry(entry, schoolId: authorizedSchoolId);
 
     // 1. Fetch existing entries for collision detection
     final existing = await fetchTimetableEntries(
       schoolId: resolved.schoolId,
       academicYearId: resolved.academicYearId,
     );
+
+    // Cross-tenant check: entry cannot be reassigned across schools
+    final existingEntry = existing.where((e) => e.id == resolved.id).firstOrNull ??
+        _cache.where((e) => e.id == resolved.id).firstOrNull;
+    if (existingEntry != null && existingEntry.schoolId.isNotEmpty && existingEntry.schoolId != resolved.schoolId) {
+      throw UnauthorizedTenantAccessException(
+        'Cannot reassign or modify timetable record across schools.',
+        requestedSchoolId: resolved.schoolId,
+        authorizedSchoolId: existingEntry.schoolId,
+      );
+    }
 
     // 2. Validate conflicts (excluding this entry ID)
     final conflict = detectConflict(
@@ -544,6 +588,7 @@ class TimetableService {
             .from('timetable_entries')
             .update(payload)
             .eq('id', resolved.id)
+            .eq('school_id', resolved.schoolId)
             .select()
             .single();
 
@@ -669,15 +714,25 @@ class TimetableService {
     required String classId,
     String? sectionId,
   }) async {
+    final cleanSchoolId = await TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: schoolId.trim().isNotEmpty ? schoolId.trim() : null,
+    );
+
     String effectiveAy = academicYearId.trim();
-    if (!TimetableEntryModel.isValidUuid(effectiveAy) && schoolId == ClassSectionService.kpsSchoolId) {
-      effectiveAy = ClassSectionService.kpsAcademicYearId;
+    if (!TimetableEntryModel.isValidUuid(effectiveAy)) {
+      try {
+        final years = await _academicYearService.fetchAcademicYears(cleanSchoolId);
+        final match = years.where((y) => y.name.toLowerCase() == effectiveAy.toLowerCase() || y.id == effectiveAy).firstOrNull ??
+            years.where((y) => y.isCurrent).firstOrNull;
+        if (match != null) effectiveAy = match.id;
+      } catch (_) {}
     }
 
     String effectiveClassId = classId.trim();
     if (!TimetableEntryModel.isValidUuid(effectiveClassId)) {
       final resolved = await _classSectionService.resolveClass(
-        schoolId: schoolId,
+        schoolId: cleanSchoolId,
         classIdentifier: effectiveClassId,
         academicYearId: effectiveAy,
       );
@@ -687,7 +742,7 @@ class TimetableService {
     String? effectiveSectionId = sectionId?.trim();
     if (effectiveSectionId != null && effectiveSectionId.isNotEmpty && !TimetableEntryModel.isValidUuid(effectiveSectionId)) {
       final resolved = await _classSectionService.resolveSection(
-        schoolId: schoolId,
+        schoolId: cleanSchoolId,
         classId: effectiveClassId,
         sectionIdentifier: effectiveSectionId,
       );
@@ -696,7 +751,7 @@ class TimetableService {
 
     // 1. Fetch all entries for this class/section
     final classEntries = await fetchTimetableEntries(
-      schoolId: schoolId,
+      schoolId: cleanSchoolId,
       academicYearId: effectiveAy,
       classId: effectiveClassId,
       sectionId: effectiveSectionId,
@@ -709,7 +764,7 @@ class TimetableService {
 
     // 2. Fetch all school entries for complete cross-class conflict check
     final allSchoolEntries = await fetchTimetableEntries(
-      schoolId: schoolId,
+      schoolId: cleanSchoolId,
       academicYearId: effectiveAy,
     );
 
@@ -741,7 +796,7 @@ class TimetableService {
             'status': 'PUBLISHED',
             'updated_at': DateTime.now().toIso8601String(),
           })
-          .eq('school_id', schoolId)
+          .eq('school_id', cleanSchoolId)
           .neq('status', 'CANCELLED');
 
       if (TimetableEntryModel.isValidUuid(effectiveAy)) {
@@ -760,7 +815,7 @@ class TimetableService {
       // Update in cache
       for (int i = 0; i < _cache.length; i++) {
         final e = _cache[i];
-        if (e.schoolId == schoolId &&
+        if (e.schoolId == cleanSchoolId &&
             (e.academicYearId == effectiveAy || e.academicYearId == academicYearId) &&
             (e.classId == effectiveClassId || e.classId == classId) &&
             (effectiveSectionId == null || effectiveSectionId.isEmpty || e.sectionId == effectiveSectionId || e.sectionId == sectionId) &&
@@ -776,7 +831,7 @@ class TimetableService {
     int count = 0;
     for (int i = 0; i < _cache.length; i++) {
       final e = _cache[i];
-      if (e.schoolId == schoolId &&
+      if (e.schoolId == cleanSchoolId &&
           (e.academicYearId == effectiveAy || e.academicYearId == academicYearId) &&
           (e.classId == effectiveClassId || e.classId == classId) &&
           (effectiveSectionId == null || effectiveSectionId.isEmpty || e.sectionId == effectiveSectionId || e.sectionId == sectionId) &&
@@ -796,15 +851,25 @@ class TimetableService {
     required String classId,
     String? sectionId,
   }) async {
+    final cleanSchoolId = await TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: schoolId.trim().isNotEmpty ? schoolId.trim() : null,
+    );
+
     String effectiveAy = academicYearId.trim();
-    if (!TimetableEntryModel.isValidUuid(effectiveAy) && schoolId == ClassSectionService.kpsSchoolId) {
-      effectiveAy = ClassSectionService.kpsAcademicYearId;
+    if (!TimetableEntryModel.isValidUuid(effectiveAy)) {
+      try {
+        final years = await _academicYearService.fetchAcademicYears(cleanSchoolId);
+        final match = years.where((y) => y.name.toLowerCase() == effectiveAy.toLowerCase() || y.id == effectiveAy).firstOrNull ??
+            years.where((y) => y.isCurrent).firstOrNull;
+        if (match != null) effectiveAy = match.id;
+      } catch (_) {}
     }
 
     String effectiveClassId = classId.trim();
     if (!TimetableEntryModel.isValidUuid(effectiveClassId)) {
       final resolved = await _classSectionService.resolveClass(
-        schoolId: schoolId,
+        schoolId: cleanSchoolId,
         classIdentifier: effectiveClassId,
         academicYearId: effectiveAy,
       );
@@ -814,7 +879,7 @@ class TimetableService {
     String? effectiveSectionId = sectionId?.trim();
     if (effectiveSectionId != null && effectiveSectionId.isNotEmpty && !TimetableEntryModel.isValidUuid(effectiveSectionId)) {
       final resolved = await _classSectionService.resolveSection(
-        schoolId: schoolId,
+        schoolId: cleanSchoolId,
         classId: effectiveClassId,
         sectionIdentifier: effectiveSectionId,
       );
@@ -828,7 +893,7 @@ class TimetableService {
             'status': 'DRAFT',
             'updated_at': DateTime.now().toIso8601String(),
           })
-          .eq('school_id', schoolId)
+          .eq('school_id', cleanSchoolId)
           .eq('status', 'PUBLISHED');
 
       if (TimetableEntryModel.isValidUuid(effectiveAy)) {
@@ -846,7 +911,7 @@ class TimetableService {
 
       for (int i = 0; i < _cache.length; i++) {
         final e = _cache[i];
-        if (e.schoolId == schoolId &&
+        if (e.schoolId == cleanSchoolId &&
             (e.academicYearId == effectiveAy || e.academicYearId == academicYearId) &&
             (e.classId == effectiveClassId || e.classId == classId) &&
             (effectiveSectionId == null || effectiveSectionId.isEmpty || e.sectionId == effectiveSectionId || e.sectionId == sectionId) &&
@@ -862,7 +927,7 @@ class TimetableService {
     int revertedCount = 0;
     for (int i = 0; i < _cache.length; i++) {
       final e = _cache[i];
-      if (e.schoolId == schoolId &&
+      if (e.schoolId == cleanSchoolId &&
           (e.academicYearId == effectiveAy || e.academicYearId == academicYearId) &&
           (e.classId == effectiveClassId || e.classId == classId) &&
           (effectiveSectionId == null || effectiveSectionId.isEmpty || e.sectionId == effectiveSectionId || e.sectionId == sectionId) &&
@@ -888,13 +953,18 @@ class TimetableService {
     String? className,
     String? sectionName,
   }) async {
+    final cleanSchoolId = await TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: schoolId.trim().isNotEmpty ? schoolId.trim() : null,
+    );
+
     if (sourceDay == targetDay) {
       throw const TimetableValidationException('Source and target day cannot be the same.');
     }
 
     // 1. Fetch source periods
     final sourceEntries = await fetchTimetableEntries(
-      schoolId: schoolId,
+      schoolId: cleanSchoolId,
       academicYearId: academicYearId,
       classId: classId,
       sectionId: sectionId,
@@ -903,7 +973,7 @@ class TimetableService {
     );
 
     final allClassEntries = await fetchTimetableEntries(
-      schoolId: schoolId,
+      schoolId: cleanSchoolId,
       academicYearId: academicYearId,
       classId: classId,
       sectionId: sectionId,
@@ -919,7 +989,7 @@ class TimetableService {
 
     // 2. Fetch all school entries on the target day for conflict verification
     final allSchoolTargetEntries = await fetchTimetableEntries(
-      schoolId: schoolId,
+      schoolId: cleanSchoolId,
       academicYearId: academicYearId,
       dayOfWeek: targetDay,
     );

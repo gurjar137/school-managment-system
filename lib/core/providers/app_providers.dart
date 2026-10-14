@@ -30,6 +30,7 @@ import '../../data/services/transport_service.dart';
 import '../../data/models/school_app_access_state.dart';
 import '../../data/services/tenant_access_service.dart';
 import '../../data/services/academic_year_service.dart';
+import '../../data/services/tenant_resolver.dart';
 export 'timetable_providers.dart';
 
 // Supabase Client Provider
@@ -391,14 +392,26 @@ class AuthNotifier extends StateNotifier<UserModel?> {
         }
       } catch (e) {
         debugPrint('[AuthNotifier _restoreUser DB fetch notice]: $e');
+        if (SupabaseConfig.isConfigured) {
+          debugPrint('[AuthNotifier _restoreUser]: DB fetch error in Supabase mode, failing closed');
+          _activeProfile = null;
+          if (mounted) state = null;
+          try {
+            await Supabase.instance.client.auth.signOut();
+          } catch (_) {}
+          return;
+        }
       }
 
       if (!mounted) return;
       if (SupabaseConfig.isConfigured) {
-        final currentId = Supabase.instance.client.auth.currentUser?.id;
-        if (currentId == null || currentId != user.id) {
-          return;
-        }
+        debugPrint('[AuthNotifier _restoreUser]: No DB profile in Supabase mode, signing out');
+        _activeProfile = null;
+        if (mounted) state = null;
+        try {
+          await Supabase.instance.client.auth.signOut();
+        } catch (_) {}
+        return;
       }
 
       final meta = user.userMetadata ?? {};
@@ -507,6 +520,7 @@ class AuthNotifier extends StateNotifier<UserModel?> {
 
   static Future<void> clearLocalSchoolCaches() async {
     try {
+      await TenantResolver.clearAllValidatedCaches();
       final prefs = await SharedPreferences.getInstance();
       final keys = prefs.getKeys();
       for (final k in keys) {

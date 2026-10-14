@@ -4,10 +4,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/academic_models.dart';
 import '../../core/config/supabase_config.dart';
-import '../../core/errors/exceptions.dart';
+import 'tenant_resolver.dart';
 
 class TransportService {
+  final SupabaseClient? _clientOverride;
+
+  TransportService({SupabaseClient? client}) : _clientOverride = client;
+
   SupabaseClient? get _client {
+    if (_clientOverride != null) return _clientOverride;
     try {
       if (SupabaseConfig.isConfigured) {
         return Supabase.instance.client;
@@ -16,63 +21,52 @@ class TransportService {
     return null;
   }
 
-  static const String _cacheKey = 'cached_transport_routes_data';
-  final List<TransportRouteModel> _cachedRoutes = [];
-  bool _isCacheLoaded = false;
+  String _cacheKey(String schoolId) => 'cached_transport_routes_${schoolId.trim()}';
+  final Map<String, List<TransportRouteModel>> _cachedRoutesBySchool = {};
 
-  Future<void> _loadCache() async {
-    if (_isCacheLoaded) return;
+  Future<void> _loadCache(String schoolId) async {
+    if (schoolId.isEmpty) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final str = prefs.getString(_cacheKey);
+      final str = prefs.getString(_cacheKey(schoolId));
       if (str != null && str.isNotEmpty) {
         final decoded = jsonDecode(str);
         if (decoded is List) {
-          _cachedRoutes.clear();
+          final list = <TransportRouteModel>[];
           for (final item in decoded) {
             if (item is Map<String, dynamic>) {
-              _cachedRoutes.add(TransportRouteModel.fromJson(item));
+              list.add(TransportRouteModel.fromJson(item));
             }
           }
+          _cachedRoutesBySchool[schoolId] = list;
         }
       }
-      _isCacheLoaded = true;
     } catch (e) {
       debugPrint('[TransportService Cache Load Warning]: $e');
     }
   }
 
-  Future<void> _saveCache() async {
+  Future<void> _saveCache(String schoolId) async {
+    if (schoolId.isEmpty) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_cacheKey, jsonEncode(_cachedRoutes.map((r) => r.toJson()).toList()));
+      final routes = _cachedRoutesBySchool[schoolId] ?? [];
+      await prefs.setString(_cacheKey(schoolId), jsonEncode(routes.map((r) => r.toJson()).toList()));
     } catch (e) {
       debugPrint('[TransportService Cache Save Warning]: $e');
     }
   }
 
   Future<String> resolveActiveSchoolId([String? schoolId]) async {
-    if (schoolId != null && schoolId.isNotEmpty) return schoolId;
-    final client = _client;
-    if (client != null && client.auth.currentUser != null) {
-      try {
-        final profile = await client
-            .from('profiles')
-            .select('school_id')
-            .eq('auth_user_id', client.auth.currentUser!.id)
-            .maybeSingle();
-        if (profile != null && profile['school_id'] != null && profile['school_id'].toString().isNotEmpty) {
-          return profile['school_id'].toString();
-        }
-      } catch (_) {}
-      throw const TenantResolutionException('Active school could not be resolved for current user. Please log in again.');
-    }
-    return '6254bee9-151d-4332-8a1c-3994af7d2153';
+    return TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: schoolId,
+    );
   }
 
   Future<List<TransportRouteModel>> fetchRoutes({String? schoolId}) async {
-    await _loadCache();
     final activeSchoolId = await resolveActiveSchoolId(schoolId);
+    await _loadCache(activeSchoolId);
 
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
@@ -84,22 +78,31 @@ class TransportService {
 
         if (data.isNotEmpty) {
           final liveList = data.map((d) => TransportRouteModel.fromJson(d)).toList();
-          _cachedRoutes.clear();
-          _cachedRoutes.addAll(liveList);
-          await _saveCache();
+          _cachedRoutesBySchool[activeSchoolId] = liveList;
+          await _saveCache(activeSchoolId);
           return liveList;
         }
+
+        // Real Supabase mode: return real rows (empty if none exist)
+        _cachedRoutesBySchool[activeSchoolId] = [];
+        await _saveCache(activeSchoolId);
+        return [];
       } catch (e) {
         debugPrint('[TransportService Supabase Fetch Warning]: $e');
+        return List.unmodifiable(_cachedRoutesBySchool[activeSchoolId] ?? []);
       }
     }
 
-    if (_cachedRoutes.isEmpty) {
-      _seedInitialRoutes();
-      await _saveCache();
+    // Pure offline / unconfigured mock mode ONLY
+    final currentCached = _cachedRoutesBySchool[activeSchoolId] ?? [];
+    if (currentCached.isEmpty) {
+      final seeded = _generateSeedRoutes();
+      _cachedRoutesBySchool[activeSchoolId] = seeded;
+      await _saveCache(activeSchoolId);
+      return seeded;
     }
 
-    return List.unmodifiable(_cachedRoutes);
+    return List.unmodifiable(currentCached);
   }
 
   Future<TransportRouteModel> addRoute({
@@ -111,8 +114,8 @@ class TransportService {
     int studentCount = 0,
     required List<String> stops,
   }) async {
-    await _loadCache();
     final activeSchoolId = await resolveActiveSchoolId(schoolId);
+    await _loadCache(activeSchoolId);
     final routeId = 'route_${DateTime.now().millisecondsSinceEpoch}';
 
     final newRoute = TransportRouteModel(
@@ -139,8 +142,8 @@ class TransportService {
 
         if (resp != null && resp['id'] != null) {
           final persisted = TransportRouteModel.fromJson(resp);
-          _cachedRoutes.add(persisted);
-          await _saveCache();
+          _cachedRoutesBySchool.putIfAbsent(activeSchoolId, () => []).add(persisted);
+          await _saveCache(activeSchoolId);
           return persisted;
         }
       } catch (e) {
@@ -148,28 +151,34 @@ class TransportService {
       }
     }
 
-    _cachedRoutes.add(newRoute);
-    await _saveCache();
+    _cachedRoutesBySchool.putIfAbsent(activeSchoolId, () => []).add(newRoute);
+    await _saveCache(activeSchoolId);
     return newRoute;
   }
 
-  Future<void> deleteRoute(String routeId) async {
-    await _loadCache();
-    _cachedRoutes.removeWhere((r) => r.id == routeId);
-    await _saveCache();
+  Future<void> deleteRoute(String routeId, {String? schoolId}) async {
+    final activeSchoolId = await resolveActiveSchoolId(schoolId);
+    await _loadCache(activeSchoolId);
+    final routes = _cachedRoutesBySchool[activeSchoolId] ?? [];
+    routes.removeWhere((r) => r.id == routeId);
+    await _saveCache(activeSchoolId);
 
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
-        await _client!.from('transport_routes').delete().eq('id', routeId);
+        await _client!
+            .from('transport_routes')
+            .delete()
+            .eq('id', routeId)
+            .eq('school_id', activeSchoolId);
       } catch (e) {
         debugPrint('[TransportService Supabase Delete Warning]: $e');
       }
     }
   }
 
-  void _seedInitialRoutes() {
-    _cachedRoutes.addAll([
-      const TransportRouteModel(
+  List<TransportRouteModel> _generateSeedRoutes() {
+    return const [
+      TransportRouteModel(
         id: 'rt_001',
         routeName: 'Route 1 - North Sector',
         busNumber: 'MH-12-AB-4501',
@@ -178,7 +187,7 @@ class TransportService {
         studentCount: 34,
         stops: ['Sector 4', 'Central Market', 'Green Park', 'School Main Gate'],
       ),
-      const TransportRouteModel(
+      TransportRouteModel(
         id: 'rt_002',
         routeName: 'Route 2 - East Corridor',
         busNumber: 'MH-12-CD-8812',
@@ -187,7 +196,7 @@ class TransportService {
         studentCount: 28,
         stops: ['Railway Colony', 'Shivaji Chowk', 'Model Town', 'School Main Gate'],
       ),
-      const TransportRouteModel(
+      TransportRouteModel(
         id: 'rt_003',
         routeName: 'Route 3 - South Hill View',
         busNumber: 'MH-12-EF-1044',
@@ -196,6 +205,6 @@ class TransportService {
         studentCount: 42,
         stops: ['Valley View', 'Lake Road', 'Hill Crest', 'School Main Gate'],
       ),
-    ]);
+    ];
   }
 }

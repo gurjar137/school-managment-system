@@ -4,9 +4,9 @@ import '../models/attendance_model.dart';
 import '../models/student_model.dart';
 import '../models/user_model.dart';
 import '../../core/config/supabase_config.dart';
-import '../../core/errors/exceptions.dart';
 import '../../core/utils/teacher_assignment_parser.dart';
 import 'student_service.dart';
+import 'tenant_resolver.dart';
 
 class ClassAttendanceSummary {
   final int totalStudents;
@@ -41,26 +41,10 @@ class AttendanceService {
   }
 
   Future<String> fetchActiveSchoolId({String? fallback}) async {
-    if (fallback != null && fallback.isNotEmpty) {
-      return fallback;
-    }
-    if (_client != null && SupabaseConfig.isConfigured) {
-      final user = _client!.auth.currentUser;
-      if (user != null) {
-        try {
-          final profile = await _client!
-              .from('profiles')
-              .select('school_id')
-              .eq('auth_user_id', user.id)
-              .maybeSingle();
-          if (profile != null && profile['school_id'] != null && profile['school_id'].toString().isNotEmpty) {
-            return profile['school_id'].toString();
-          }
-        } catch (_) {}
-      }
-      throw const TenantResolutionException('Active school could not be resolved for current user. Please log in again.');
-    }
-    return 'offline_mock_school';
+    return TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: fallback,
+    );
   }
 
   Future<String?> fetchActiveAcademicYearId(String schoolId) async {

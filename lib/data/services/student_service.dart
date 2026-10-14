@@ -601,6 +601,7 @@ class StudentService {
           } else {
             break;
           }
+        }
         if (normalized.isNotEmpty) {
           final list = normalized.toList();
           list.sort((a, b) {

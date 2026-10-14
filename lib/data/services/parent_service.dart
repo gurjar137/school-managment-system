@@ -6,7 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/parent_model.dart';
 import '../models/user_model.dart';
 import '../../core/config/supabase_config.dart';
-import '../../core/errors/exceptions.dart';
+import 'tenant_resolver.dart';
 
 class ParentService {
   String _generateUuid() {
@@ -23,18 +23,20 @@ class ParentService {
     return null;
   }
 
-  static const String _parentsCacheKey = 'cached_parents_data';
-  static const String _linksCacheKey = 'cached_parent_links_data';
+  String _parentsCacheKey(String schoolId) => 'cached_parents_${schoolId.trim()}';
+  String _linksCacheKey(String schoolId) => 'cached_parent_links_${schoolId.trim()}';
 
   final List<ParentModel> _cachedParents = [];
   final List<ParentStudentLinkModel> _cachedLinks = [];
   bool _isCacheLoaded = false;
+  String _currentCacheSchoolId = '';
 
-  Future<void> _loadCache() async {
-    if (_isCacheLoaded) return;
+  Future<void> _loadCache([String? schoolId]) async {
+    final activeId = schoolId ?? await resolveActiveSchoolId();
+    if (_isCacheLoaded && _currentCacheSchoolId == activeId) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final pStr = prefs.getString(_parentsCacheKey);
+      final pStr = prefs.getString(_parentsCacheKey(activeId));
       if (pStr != null && pStr.isNotEmpty) {
         final decoded = jsonDecode(pStr);
         if (decoded is List) {
@@ -47,7 +49,7 @@ class ParentService {
         }
       }
 
-      final lStr = prefs.getString(_linksCacheKey);
+      final lStr = prefs.getString(_linksCacheKey(activeId));
       if (lStr != null && lStr.isNotEmpty) {
         final decoded = jsonDecode(lStr);
         if (decoded is List) {
@@ -60,40 +62,28 @@ class ParentService {
         }
       }
       _isCacheLoaded = true;
+      _currentCacheSchoolId = activeId;
     } catch (e) {
       debugPrint('[ParentService Cache Load Warning]: $e');
     }
   }
 
-  Future<void> _saveCache() async {
+  Future<void> _saveCache([String? schoolId]) async {
+    final activeId = schoolId ?? await resolveActiveSchoolId();
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_parentsCacheKey, jsonEncode(_cachedParents.map((p) => p.toJson()).toList()));
-      await prefs.setString(_linksCacheKey, jsonEncode(_cachedLinks.map((l) => l.toJson()).toList()));
+      await prefs.setString(_parentsCacheKey(activeId), jsonEncode(_cachedParents.map((p) => p.toJson()).toList()));
+      await prefs.setString(_linksCacheKey(activeId), jsonEncode(_cachedLinks.map((l) => l.toJson()).toList()));
     } catch (e) {
       debugPrint('[ParentService Cache Save Warning]: $e');
     }
   }
 
   Future<String> resolveActiveSchoolId([String? schoolId]) async {
-    if (schoolId != null && schoolId.isNotEmpty) return schoolId;
-    final client = _client;
-    if (client != null && client.auth.currentUser != null) {
-      try {
-        final profile = await client
-            .from('profiles')
-            .select('school_id')
-            .eq('auth_user_id', client.auth.currentUser!.id)
-            .maybeSingle();
-        if (profile != null && profile['school_id'] != null && profile['school_id'].toString().isNotEmpty) {
-          return profile['school_id'].toString();
-        }
-      } catch (_) {}
-    }
-    if (SupabaseConfig.isConfigured) {
-      throw const TenantResolutionException('Active school could not be resolved for current user. Please log in again.');
-    }
-    return 'offline_mock_school';
+    return TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: schoolId,
+    );
   }
 
   // --- FETCH PARENTS ---

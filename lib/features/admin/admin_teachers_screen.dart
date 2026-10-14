@@ -37,7 +37,7 @@ class _AdminTeachersScreenState extends ConsumerState<AdminTeachersScreen> {
   @override
   Widget build(BuildContext context) {
     final repo = ref.watch(schoolRepositoryProvider);
-    final activeSchoolId = ref.watch(authProvider.notifier).activeProfile?.schoolId ?? ref.watch(authProvider)?.schoolId ?? '6254bee9-151d-4332-8a1c-3994af7d2153';
+    final activeSchoolId = ref.watch(authProvider.notifier).activeProfile?.schoolId ?? ref.watch(authProvider)?.schoolId ?? '';
 
     return Scaffold(
       appBar: AppBar(

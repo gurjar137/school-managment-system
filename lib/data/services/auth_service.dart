@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../../core/config/supabase_config.dart';
+import 'tenant_resolver.dart';
 
 class AuthService {
   SupabaseClient? get _client {
@@ -436,7 +437,7 @@ class AuthService {
     String? schoolId,
   }) async {
     await Future.delayed(const Duration(milliseconds: 350));
-    final resolvedSchoolId = schoolId ?? '6254bee9-151d-4332-8a1c-3994af7d2153';
+    final resolvedSchoolId = schoolId ?? 'SCH-${DateTime.now().millisecondsSinceEpoch}';
     final trimmedEmail = email.trim().toLowerCase();
 
     if (_client != null && SupabaseConfig.isConfigured) {
@@ -619,6 +620,7 @@ class AuthService {
 
   // --- SIGN OUT ---
   Future<void> signOut() async {
+    await TenantResolver.clearAllValidatedCaches();
     if (_client != null) {
       try {
         await _client!.auth.signOut();

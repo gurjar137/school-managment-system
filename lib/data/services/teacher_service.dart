@@ -6,6 +6,7 @@ import '../models/academic_models.dart';
 import '../models/user_model.dart';
 import '../models/staff_model.dart';
 import '../../core/config/supabase_config.dart';
+import 'tenant_resolver.dart';
 
 class TeacherService {
   SupabaseClient? get _client {
@@ -500,6 +501,13 @@ class TeacherService {
     ),
   ];
 
+  Future<String> fetchActiveSchoolId({String? fallback}) async {
+    return TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: fallback,
+    );
+  }
+
   // --- TEACHERS & STAFF ---
   Future<List<TeacherModel>> getTeachers({
     String? schoolId,
@@ -510,9 +518,17 @@ class TeacherService {
     await Future.delayed(const Duration(milliseconds: 100));
 
     final List<TeacherModel> list = [];
-    final String effectiveSchoolId = (schoolId != null && schoolId.trim().isNotEmpty)
-        ? schoolId.trim()
-        : ((_client?.auth.currentUser?.userMetadata?['school_id'] as String?) ?? kpsSchoolId);
+    final String effectiveSchoolId;
+    if (SupabaseConfig.isConfigured) {
+      effectiveSchoolId = await TenantResolver.resolveActiveSchoolId(
+        client: _client,
+        requestedSchoolId: schoolId,
+      );
+    } else {
+      effectiveSchoolId = (schoolId != null && schoolId.trim().isNotEmpty)
+          ? schoolId.trim()
+          : 'offline_mock_school';
+    }
 
     if (_client != null && SupabaseConfig.isConfigured && effectiveSchoolId.isNotEmpty) {
       try {
@@ -575,27 +591,14 @@ class TeacherService {
           }
         }
       }
-    }
-
-    // If database returned 0 rows (e.g. offline, unauthenticated anon cache fallback, or remote RLS filtering for admin)
-    if (list.isEmpty) {
+    } else {
+      // Offline / unconfigured mock mode ONLY
       await _restoreTeachersCache(effectiveSchoolId);
       if (_teachers.isNotEmpty) {
         list.addAll(_teachers.where((t) => effectiveSchoolId.isEmpty || t.schoolId == effectiveSchoolId));
       }
-    }
-
-    // For KPS, ensure the authentic school teachers exist and match the campus structure
-    if (effectiveSchoolId == kpsSchoolId) {
-      for (final seeded in _kpsBaselineTeachers) {
-        final exists = list.any((t) =>
-            t.id == seeded.id ||
-            (seeded.authUserId != null && t.authUserId == seeded.authUserId) ||
-            t.email.toLowerCase() == seeded.email.toLowerCase() ||
-            t.employeeId == seeded.employeeId);
-        if (!exists) {
-          list.add(seeded);
-        }
+      if (list.isEmpty && (effectiveSchoolId.isEmpty || effectiveSchoolId == kpsSchoolId)) {
+        list.addAll(_kpsBaselineTeachers);
       }
     }
 

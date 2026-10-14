@@ -33,6 +33,15 @@ class SchoolRepository {
         _libraryService = libraryService ?? LibraryService(),
         _transportService = transportService ?? TransportService();
 
+  SupabaseClient? get _client {
+    try {
+      if (SupabaseConfig.isConfigured) {
+        return Supabase.instance.client;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // Get Students (Supports Scoping & Filtering from Supabase)
   Future<List<StudentModel>> getStudents({
     String? schoolId,
@@ -193,9 +202,9 @@ class SchoolRepository {
   }
 
   Future<List<HomeworkModel>> getHomework({String? schoolId, String? className, String? section}) async {
-    if (SupabaseConfig.isConfigured) {
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
       try {
-        final client = Supabase.instance.client;
         final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
             ? schoolId
             : await _studentService.fetchActiveSchoolId();
@@ -209,9 +218,10 @@ class SchoolRepository {
         }
         final res = await query.order('due_date', ascending: true);
         final list = (res as List).map((row) => HomeworkModel.fromJson(row)).toList();
-        if (list.isNotEmpty) return list;
+        return list;
       } catch (e) {
         debugPrint('[SchoolRepository getHomework Warning]: $e');
+        return [];
       }
     }
     if (_homework.isEmpty) {
@@ -270,9 +280,9 @@ class SchoolRepository {
 
   Future<void> addHomework(HomeworkModel item, {String? schoolId, String? academicYearId}) async {
     _homework.insert(0, item);
-    if (SupabaseConfig.isConfigured) {
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
       try {
-        final client = Supabase.instance.client;
         final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
             ? schoolId
             : await _studentService.fetchActiveSchoolId();
@@ -298,9 +308,9 @@ class SchoolRepository {
   }
 
   Future<List<NoticeModel>> getNotices({String? schoolId}) async {
-    if (SupabaseConfig.isConfigured) {
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
       try {
-        final client = Supabase.instance.client;
         final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
             ? schoolId
             : await _studentService.fetchActiveSchoolId();
@@ -312,9 +322,10 @@ class SchoolRepository {
             .order('created_at', ascending: false);
 
         final list = (res as List).map((row) => NoticeModel.fromJson(row)).toList();
-        if (list.isNotEmpty) return list;
+        return list;
       } catch (e) {
         debugPrint('[SchoolRepository getNotices Warning]: $e');
+        return [];
       }
     }
     if (_notices.isEmpty) {
@@ -357,9 +368,9 @@ class SchoolRepository {
 
   Future<void> addNotice(NoticeModel item, {String? schoolId, String? academicYearId}) async {
     _notices.insert(0, item);
-    if (SupabaseConfig.isConfigured) {
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
       try {
-        final client = Supabase.instance.client;
         final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
             ? schoolId
             : await _studentService.fetchActiveSchoolId();
@@ -380,9 +391,9 @@ class SchoolRepository {
   }
 
   Future<List<LeaveRequestModel>> getLeaveRequests({String? schoolId}) async {
-    if (SupabaseConfig.isConfigured) {
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
       try {
-        final client = Supabase.instance.client;
         final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
             ? schoolId
             : await _studentService.fetchActiveSchoolId();
@@ -392,9 +403,10 @@ class SchoolRepository {
             .eq('school_id', effectiveSchoolId)
             .order('created_at', ascending: false);
         final list = (res as List).map((row) => LeaveRequestModel.fromJson(row)).toList();
-        if (list.isNotEmpty) return list;
+        return list;
       } catch (e) {
         debugPrint('[SchoolRepository getLeaveRequests Warning]: $e');
+        return [];
       }
     }
     if (_leaveRequests.isEmpty) {
@@ -440,9 +452,9 @@ class SchoolRepository {
     if (idx != -1) {
       _leaveRequests[idx] = _leaveRequests[idx].copyWith(status: status);
     }
-    if (SupabaseConfig.isConfigured) {
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
       try {
-        final client = Supabase.instance.client;
         await client
             .from('leave_requests')
             .update({'status': status.name.toUpperCase()})

@@ -2,8 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/result_models.dart';
 import 'grade_service.dart';
-import 'class_section_service.dart';
 import '../../core/config/supabase_config.dart';
+import '../../core/errors/exceptions.dart';
+import 'tenant_resolver.dart';
 
 class ResultService {
   SupabaseClient? get _client {
@@ -18,25 +19,10 @@ class ResultService {
   final Map<String, List<StudentResultModel>> _examResultsMap = {};
 
   Future<String?> resolveActiveSchoolId([String? schoolId]) async {
-    if (schoolId != null && schoolId.isNotEmpty) return schoolId;
-    final client = _client;
-    if (client != null && client.auth.currentUser != null) {
-      try {
-        final profile = await client
-            .from('profiles')
-            .select('school_id')
-            .eq('auth_user_id', client.auth.currentUser!.id)
-            .maybeSingle();
-        if (profile != null && profile['school_id'] != null) {
-          return profile['school_id'].toString();
-        }
-        final metaId = client.auth.currentUser!.userMetadata?['school_id'];
-        if (metaId != null && metaId.toString().isNotEmpty) {
-          return metaId.toString();
-        }
-      } catch (_) {}
-    }
-    return '6254bee9-151d-4332-8a1c-3994af7d2153';
+    return TenantResolver.resolveActiveSchoolId(
+      client: _client,
+      requestedSchoolId: schoolId,
+    );
   }
 
   ExamModel _mapSupabaseToExamModel(Map<String, dynamic> row) {
@@ -134,11 +120,10 @@ class ResultService {
       }
 
       if (academicYearId == null || academicYearId.isEmpty) {
-        if (schoolId == '6254bee9-151d-4332-8a1c-3994af7d2153') {
-          academicYearId = '47d1569b-e032-44a7-891f-b21f5458f55b';
-        } else {
-          throw Exception('Academic year could not be resolved for school $schoolId');
-        }
+        throw AcademicYearResolutionException(
+          'Academic year could not be resolved for school $schoolId',
+          schoolId: schoolId,
+        );
       }
 
       // 2. Resolve class_id strictly using school_id AND academic_year_id (No fallback)
@@ -164,13 +149,9 @@ class ResultService {
       }
 
       if (resolvedClassId == null || resolvedClassId.isEmpty) {
-        if (schoolId == '6254bee9-151d-4332-8a1c-3994af7d2153') {
-          resolvedClassId = ClassSectionService.kpsClassUuid(int.tryParse(numTarget) ?? 10);
-        } else {
-          throw Exception(
-            'Selected class "${newExam.className}" could not be resolved for academic year $academicYearId in this school.',
-          );
-        }
+        throw Exception(
+          'Selected class "${newExam.className}" could not be resolved for academic year $academicYearId in this school.',
+        );
       }
 
       // 3. Resolve subject_id from public.subjects when matching catalog entry exists
