@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/school_os_widgets.dart';
 import '../../data/models/user_model.dart';
 
 class MainNavigationScreen extends ConsumerWidget {
@@ -11,99 +13,99 @@ class MainNavigationScreen extends ConsumerWidget {
 
   const MainNavigationScreen({super.key, required this.child});
 
-  int _calculateSelectedIndex(BuildContext context, bool isTeacher) {
-    final location = GoRouterState.of(context).uri.toString();
-    if (isTeacher) {
-      if (location.startsWith('/home')) return 0;
-      if (location.startsWith('/students')) return 1;
-      if (location.startsWith('/attendance')) return 2;
-      if (location.startsWith('/homework')) return 3;
-      if (location.startsWith('/results')) return 4;
-      if (location.startsWith('/profile')) return 5;
-      return 0;
-    } else {
-      if (location.startsWith('/home')) return 0;
-      if (location.startsWith('/teachers')) return 1;
-      if (location.startsWith('/students')) return 2;
-      if (location.startsWith('/fees')) return 3;
-      if (location.startsWith('/reports')) return 4;
-      if (location.startsWith('/more')) return 5;
-      return 0;
-    }
-  }
-
-  void _onItemTapped(int index, BuildContext context, bool isTeacher) {
-    if (isTeacher) {
-      switch (index) {
-        case 0:
-          context.go('/home');
-          break;
-        case 1:
-          context.go('/students');
-          break;
-        case 2:
-          context.go('/attendance');
-          break;
-        case 3:
-          context.go('/homework');
-          break;
-        case 4:
-          context.go('/results');
-          break;
-        case 5:
-          context.go('/profile');
-          break;
-      }
-    } else {
-      switch (index) {
-        case 0:
-          context.go('/home');
-          break;
-        case 1:
-          context.go('/teachers');
-          break;
-        case 2:
-          context.go('/students');
-          break;
-        case 3:
-          context.go('/fees');
-          break;
-        case 4:
-          context.go('/reports');
-          break;
-        case 5:
-          context.go('/more');
-          break;
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider);
     final isTeacher = user?.role == UserRole.teacher;
-    final selectedIndex = _calculateSelectedIndex(context, isTeacher);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentPath = GoRouterState.of(context).uri.path;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isDesktop = constraints.maxWidth >= 800;
+        final isDesktop = constraints.maxWidth >= 900;
 
         if (isDesktop) {
           return Scaffold(
+            backgroundColor: AppColors.mainBackground,
             body: Row(
               children: [
-                _buildDesktopSidebar(context, ref, user, isTeacher, selectedIndex, isDark),
-                const VerticalDivider(width: 1, thickness: 1),
-                Expanded(child: child),
+                _buildDesktopSidebar(context, ref, user, isTeacher, currentPath),
+                Expanded(
+                  child: Column(
+                    children: [
+                      SchoolOsTopHeader(
+                        onSearchTap: () => context.push('/global-search'),
+                      ),
+                      Expanded(
+                        child: Container(
+                          color: AppColors.mainBackground,
+                          child: child,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           );
         }
 
+        // Mobile / Tablet Layout
         return Scaffold(
+          backgroundColor: AppColors.mainBackground,
+          appBar: AppBar(
+            backgroundColor: AppColors.cardBackground,
+            elevation: 0,
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.indigo,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.school_rounded, color: Colors.white, size: 18),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  user?.schoolName ?? 'School OS',
+                  style: AppTypography.titleMedium.copyWith(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.search_rounded, color: AppColors.secondaryText),
+                tooltip: 'Global Search',
+                onPressed: () => context.push('/global-search'),
+              ),
+              IconButton(
+                icon: const Icon(Icons.notifications_none_rounded, color: AppColors.secondaryText),
+                tooltip: 'Notifications',
+                onPressed: () => context.push('/notifications'),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: GestureDetector(
+                  onTap: () => context.push('/profile'),
+                  child: AppAvatar(
+                    imageUrl: user?.avatarUrl ?? '',
+                    name: user?.name ?? 'User',
+                    radius: 16,
+                    borderColor: AppColors.indigo,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          drawer: _buildMobileDrawer(context, ref, user, isTeacher, currentPath),
           body: child,
-          bottomNavigationBar: _buildBottomNav(context, isTeacher, selectedIndex, isDark),
+          bottomNavigationBar: _buildBottomNav(context, isTeacher, currentPath),
         );
       },
     );
@@ -114,55 +116,42 @@ class MainNavigationScreen extends ConsumerWidget {
     WidgetRef ref,
     UserModel? user,
     bool isTeacher,
-    int selectedIndex,
-    bool isDark,
+    String currentPath,
   ) {
-    final navItems = isTeacher
-        ? [
-            _DesktopNavItem(0, Icons.home_rounded, Icons.home_outlined, 'Dashboard'),
-            _DesktopNavItem(1, Icons.people_rounded, Icons.people_outline_rounded, 'My Class'),
-            _DesktopNavItem(2, Icons.fact_check_rounded, Icons.fact_check_outlined, 'Attendance'),
-            _DesktopNavItem(3, Icons.assignment_rounded, Icons.assignment_outlined, 'Homework'),
-            _DesktopNavItem(4, Icons.bar_chart_rounded, Icons.bar_chart_outlined, 'Results'),
-            _DesktopNavItem(5, Icons.person_rounded, Icons.person_outline_rounded, 'Profile'),
-          ]
-        : [
-            _DesktopNavItem(0, Icons.dashboard_rounded, Icons.dashboard_outlined, 'Dashboard'),
-            _DesktopNavItem(1, Icons.badge_rounded, Icons.badge_outlined, 'Staff & Teachers'),
-            _DesktopNavItem(2, Icons.people_rounded, Icons.people_outline_rounded, 'Students'),
-            _DesktopNavItem(3, Icons.payments_rounded, Icons.payments_outlined, 'Fees'),
-            _DesktopNavItem(4, Icons.bar_chart_rounded, Icons.bar_chart_outlined, 'Reports'),
-            _DesktopNavItem(5, Icons.widgets_rounded, Icons.widgets_outlined, 'More'),
-          ];
-
-    final bgColor = isDark ? AppColors.darkSurface : AppColors.pureWhite;
-    final primaryColor = isDark ? AppColors.softLavender : AppColors.midnightNavy;
-
     return Container(
-      width: 250,
-      color: bgColor,
+      width: 260,
+      decoration: const BoxDecoration(
+        color: AppColors.navy,
+        border: Border(
+          right: BorderSide(color: Color(0xFF1E293B), width: 1),
+        ),
+      ),
       child: Column(
         children: [
           // Institution & Brand Header
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
             child: Row(
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
-                    color: AppColors.midnightNavy,
-                    borderRadius: BorderRadius.circular(10),
+                    gradient: const LinearGradient(
+                      colors: [AppColors.indigo, Color(0xFF6366F1)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.midnightNavy.withOpacity(0.2),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
+                        color: AppColors.indigo.withValues(alpha: 0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.school_rounded, color: AppColors.pureWhite, size: 22),
+                  child: const Icon(Icons.school_rounded, color: Colors.white, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -173,16 +162,19 @@ class MainNavigationScreen extends ConsumerWidget {
                       Text(
                         'School OS',
                         style: AppTypography.titleMedium.copyWith(
+                          color: Colors.white,
                           fontWeight: FontWeight.w800,
+                          fontSize: 16,
                           letterSpacing: -0.3,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 2),
                       Text(
-                        user?.schoolName ?? (isTeacher ? 'Staff Workspace' : 'Institution Command'),
+                        user?.schoolName ?? (isTeacher ? 'Faculty Workspace' : 'Command Center'),
                         style: AppTypography.labelSmall.copyWith(
-                          color: AppColors.coolGray,
+                          color: const Color(0xFF94A3B8),
                           fontSize: 11,
                         ),
                         maxLines: 1,
@@ -194,95 +186,29 @@ class MainNavigationScreen extends ConsumerWidget {
               ],
             ),
           ),
-          const Divider(height: 1, thickness: 1),
-          const SizedBox(height: 10),
+          const Divider(color: Color(0xFF1E293B), height: 1),
 
-          // Navigation Links
+          // Scrollable Navigation Menu
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              itemCount: navItems.length,
-              itemBuilder: (context, index) {
-                final item = navItems[index];
-                final isSelected = selectedIndex == item.index;
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Material(
-                    color: isSelected
-                        ? (isDark ? AppColors.softLavender.withOpacity(0.18) : AppColors.midnightNavy.withOpacity(0.08))
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      hoverColor: isDark
-                          ? AppColors.softLavender.withOpacity(0.08)
-                          : AppColors.midnightNavy.withOpacity(0.04),
-                      onTap: () => _onItemTapped(item.index, context, isTeacher),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                        child: Row(
-                          children: [
-                            Icon(
-                              isSelected ? item.activeIcon : item.inactiveIcon,
-                              size: 20,
-                              color: isSelected ? primaryColor : AppColors.coolGray,
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Text(
-                                item.label,
-                                style: AppTypography.bodyMedium.copyWith(
-                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                  color: isSelected ? primaryColor : (isDark ? AppColors.pureWhite : AppColors.midnightNavy),
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                            if (isSelected)
-                              Container(
-                                width: 5,
-                                height: 5,
-                                decoration: BoxDecoration(
-                                  color: primaryColor,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              children: isTeacher
+                  ? _buildTeacherMenuItems(context, currentPath)
+                  : _buildAdminMenuItems(context, currentPath),
             ),
           ),
 
           // User Profile & Logout Footer
-          const Divider(height: 1, thickness: 1),
+          const Divider(color: Color(0xFF1E293B), height: 1),
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             child: Row(
               children: [
-                Builder(
-                  builder: (context) {
-                    final avatarUrl = user?.avatarUrl;
-                    final hasAvatar = avatarUrl != null && avatarUrl.isNotEmpty;
-                    return CircleAvatar(
-                      radius: 18,
-                      backgroundColor: isDark ? AppColors.darkSurface : AppColors.surfaceLight,
-                      backgroundImage: hasAvatar ? NetworkImage(avatarUrl) : null,
-                      child: !hasAvatar
-                          ? Text(
-                              (user?.name.isNotEmpty == true ? user!.name[0] : 'U').toUpperCase(),
-                              style: AppTypography.labelLarge.copyWith(
-                                color: primaryColor,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            )
-                          : null,
-                    );
-                  },
+                AppAvatar(
+                  imageUrl: user?.avatarUrl ?? '',
+                  name: user?.name ?? 'User',
+                  radius: 18,
+                  borderColor: AppColors.indigo,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -292,7 +218,8 @@ class MainNavigationScreen extends ConsumerWidget {
                     children: [
                       Text(
                         user?.name ?? 'Administrator',
-                        style: AppTypography.bodyMedium.copyWith(
+                        style: AppTypography.bodySmall.copyWith(
+                          color: Colors.white,
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),
@@ -300,9 +227,9 @@ class MainNavigationScreen extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        user?.designation ?? (isTeacher ? 'Teacher' : 'Principal'),
+                        user?.designation ?? (isTeacher ? 'Class Teacher' : 'Campus Admin'),
                         style: AppTypography.labelSmall.copyWith(
-                          color: AppColors.coolGray,
+                          color: const Color(0xFF94A3B8),
                           fontSize: 10,
                         ),
                         maxLines: 1,
@@ -312,8 +239,8 @@ class MainNavigationScreen extends ConsumerWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Sign Out',
-                  icon: const Icon(Icons.logout_rounded, size: 18, color: AppColors.coolGray),
+                  tooltip: 'Sign Out & Lock Workspace',
+                  icon: const Icon(Icons.logout_rounded, size: 18, color: Color(0xFFEF4444)),
                   onPressed: () async {
                     await ref.read(authProvider.notifier).logout();
                     if (context.mounted) {
@@ -329,53 +256,126 @@ class MainNavigationScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildBottomNav(
-    BuildContext context,
-    bool isTeacher,
-    int selectedIndex,
-    bool isDark,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.pureWhite,
-        border: Border(
-          top: BorderSide(
-            color: isDark ? AppColors.borderDark : AppColors.borderLight,
-            width: 1,
-          ),
+  List<Widget> _buildAdminMenuItems(BuildContext context, String currentPath) {
+    return [
+      _buildSectionHeader('OVERVIEW'),
+      _buildSidebarItem(context, 'Dashboard', Icons.grid_view_rounded, '/home', currentPath == '/home' || currentPath == '/'),
+
+      _buildSectionHeader('ACADEMICS'),
+      _buildSidebarItem(context, 'Students', Icons.groups_rounded, '/students', currentPath.startsWith('/student')),
+      _buildSidebarItem(context, 'Staff & Teachers', Icons.badge_rounded, '/teachers', currentPath.startsWith('/teacher') && !currentPath.contains('leave') && !currentPath.contains('access')),
+      _buildSidebarItem(context, 'Classes & Sections', Icons.meeting_room_rounded, '/classes', currentPath.startsWith('/class')),
+      _buildSidebarItem(context, 'Academic Sessions', Icons.calendar_month_rounded, '/academic-years', currentPath.startsWith('/academic-year')),
+      _buildSidebarItem(context, 'Timetable', Icons.calendar_today_rounded, '/schedule', currentPath.startsWith('/schedule') || currentPath.startsWith('/timetable')),
+      _buildSidebarItem(context, 'Attendance', Icons.fact_check_rounded, '/attendance', currentPath.startsWith('/attendance') || currentPath.startsWith('/mark-attendance')),
+      _buildSidebarItem(context, 'Homework', Icons.assignment_rounded, '/homework', currentPath.startsWith('/homework')),
+      _buildSidebarItem(context, 'Exams & Results', Icons.bar_chart_rounded, '/results', currentPath.startsWith('/result') || currentPath.startsWith('/exam')),
+
+      _buildSectionHeader('FINANCE & OPERATIONS'),
+      _buildSidebarItem(context, 'Fees & Finance', Icons.account_balance_wallet_rounded, '/fees', currentPath.startsWith('/fee')),
+      _buildSidebarItem(context, 'Staff Payroll', Icons.receipt_long_rounded, '/salary', currentPath.startsWith('/salary')),
+      _buildSidebarItem(context, 'Leave Requests', Icons.event_note_rounded, '/teacher-leaves', currentPath.contains('leave')),
+      _buildSidebarItem(context, 'Library Catalog', Icons.local_library_rounded, '/library', currentPath.startsWith('/library')),
+      _buildSidebarItem(context, 'Transport Routes', Icons.directions_bus_rounded, '/transport', currentPath.startsWith('/transport')),
+
+      _buildSectionHeader('COMMUNICATIONS'),
+      _buildSidebarItem(context, 'Notice Board', Icons.campaign_rounded, '/notices', currentPath.startsWith('/notice')),
+      _buildSidebarItem(context, 'Notifications', Icons.notifications_rounded, '/notifications', currentPath.startsWith('/notification')),
+      _buildSidebarItem(context, 'Analytics & Reports', Icons.pie_chart_rounded, '/reports', currentPath.startsWith('/report')),
+
+      _buildSectionHeader('SETTINGS & SECURITY'),
+      _buildSidebarItem(context, 'Teacher Access', Icons.lock_person_rounded, '/teacher-access', currentPath.startsWith('/teacher-access')),
+      _buildSidebarItem(context, 'Parent Access Codes', Icons.qr_code_2_rounded, '/parent-codes', currentPath.startsWith('/parent-code')),
+      _buildSidebarItem(context, 'Activity Log', Icons.history_rounded, '/activity-log', currentPath.startsWith('/activity-log')),
+      _buildSidebarItem(context, 'School Settings', Icons.tune_rounded, '/school-settings', currentPath.startsWith('/school-settings')),
+      _buildSidebarItem(context, 'App Settings', Icons.settings_rounded, '/settings', currentPath == '/settings'),
+    ];
+  }
+
+  List<Widget> _buildTeacherMenuItems(BuildContext context, String currentPath) {
+    return [
+      _buildSectionHeader('OVERVIEW'),
+      _buildSidebarItem(context, 'Dashboard', Icons.grid_view_rounded, '/home', currentPath == '/home' || currentPath == '/'),
+
+      _buildSectionHeader('ACADEMICS'),
+      _buildSidebarItem(context, 'My Class Roster', Icons.groups_rounded, '/students', currentPath.startsWith('/student')),
+      _buildSidebarItem(context, 'Take Attendance', Icons.fact_check_rounded, '/attendance', currentPath.startsWith('/attendance') || currentPath.startsWith('/mark-attendance')),
+      _buildSidebarItem(context, 'Homework', Icons.assignment_rounded, '/homework', currentPath.startsWith('/homework')),
+      _buildSidebarItem(context, 'Evaluations & Marks', Icons.bar_chart_rounded, '/results', currentPath.startsWith('/result') || currentPath.startsWith('/exam')),
+      _buildSidebarItem(context, 'My Timetable', Icons.calendar_today_rounded, '/schedule', currentPath.startsWith('/schedule') || currentPath.startsWith('/timetable')),
+
+      _buildSectionHeader('MANAGEMENT'),
+      _buildSidebarItem(context, 'Apply For Leave', Icons.event_note_rounded, '/teacher-leaves', currentPath.contains('leave')),
+      _buildSidebarItem(context, 'School Notices', Icons.campaign_rounded, '/notices', currentPath.startsWith('/notice')),
+      _buildSidebarItem(context, 'My Profile', Icons.person_rounded, '/profile', currentPath.startsWith('/profile')),
+    ];
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 14, 10, 6),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Color(0xFF64748B),
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.2,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
       ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+    );
+  }
+
+  Widget _buildSidebarItem(
+    BuildContext context,
+    String label,
+    IconData icon,
+    String route,
+    bool isSelected,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Material(
+        color: isSelected ? AppColors.indigo : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          hoverColor: Colors.white.withValues(alpha: 0.08),
+          onTap: () {
+            if (!isSelected) {
+              context.go(route);
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: isTeacher
-                  ? [
-                      _buildNavItem(context, 0, Icons.home_rounded, Icons.home_outlined, 'Dashboard', selectedIndex, isTeacher),
-                      _buildNavItem(context, 1, Icons.people_rounded, Icons.people_outline_rounded, 'My Class', selectedIndex, isTeacher),
-                      _buildNavItem(context, 2, Icons.fact_check_rounded, Icons.fact_check_outlined, 'Attendance', selectedIndex, isTeacher),
-                      _buildNavItem(context, 3, Icons.assignment_rounded, Icons.assignment_outlined, 'Homework', selectedIndex, isTeacher),
-                      _buildNavItem(context, 4, Icons.bar_chart_rounded, Icons.bar_chart_outlined, 'Results', selectedIndex, isTeacher),
-                      _buildNavItem(context, 5, Icons.person_rounded, Icons.person_outline_rounded, 'Profile', selectedIndex, isTeacher),
-                    ]
-                  : [
-                      _buildNavItem(context, 0, Icons.dashboard_rounded, Icons.dashboard_outlined, 'Dashboard', selectedIndex, isTeacher),
-                      _buildNavItem(context, 1, Icons.badge_rounded, Icons.badge_outlined, 'Staff & Teachers', selectedIndex, isTeacher),
-                      _buildNavItem(context, 2, Icons.people_rounded, Icons.people_outline_rounded, 'Students', selectedIndex, isTeacher),
-                      _buildNavItem(context, 3, Icons.payments_rounded, Icons.payments_outlined, 'Fees', selectedIndex, isTeacher),
-                      _buildNavItem(context, 4, Icons.bar_chart_rounded, Icons.bar_chart_outlined, 'Reports', selectedIndex, isTeacher),
-                      _buildNavItem(context, 5, Icons.widgets_rounded, Icons.widgets_outlined, 'More', selectedIndex, isTeacher),
-                    ],
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : const Color(0xFFCBD5E1),
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                if (isSelected)
+                  Container(
+                    width: 5,
+                    height: 5,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -383,63 +383,160 @@ class MainNavigationScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildNavItem(
+  Widget _buildMobileDrawer(
     BuildContext context,
-    int index,
-    IconData activeIcon,
-    IconData inactiveIcon,
-    String label,
-    int selectedIndex,
+    WidgetRef ref,
+    UserModel? user,
     bool isTeacher,
+    String currentPath,
   ) {
-    final isSelected = selectedIndex == index;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return GestureDetector(
-      onTap: () => _onItemTapped(index, context, isTeacher),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? (isDark ? AppColors.softLavender.withOpacity(0.2) : AppColors.midnightNavy.withOpacity(0.08))
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
-        ),
+    return Drawer(
+      backgroundColor: AppColors.navy,
+      child: SafeArea(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isSelected ? activeIcon : inactiveIcon,
-              size: 20,
-              color: isSelected
-                  ? (isDark ? AppColors.softLavender : AppColors.midnightNavy)
-                  : AppColors.coolGray,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: AppTypography.labelSmall.copyWith(
-                fontSize: 9,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                color: isSelected
-                    ? (isDark ? AppColors.softLavender : AppColors.midnightNavy)
-                    : AppColors.coolGray,
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: AppColors.indigo,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.school_rounded, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'School OS',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        Text(
+                          user?.schoolName ?? 'Command Center',
+                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
+            ),
+            const Divider(color: Color(0xFF1E293B)),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                children: isTeacher
+                    ? _buildTeacherMenuItems(context, currentPath)
+                    : _buildAdminMenuItems(context, currentPath),
+              ),
+            ),
+            const Divider(color: Color(0xFF1E293B)),
+            ListTile(
+              leading: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444)),
+              title: const Text('Sign Out', style: TextStyle(color: Colors.white, fontSize: 14)),
+              onTap: () async {
+                Navigator.of(context).pop();
+                await ref.read(authProvider.notifier).logout();
+                if (context.mounted) {
+                  context.go('/role-selection');
+                }
+              },
             ),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildBottomNav(
+    BuildContext context,
+    bool isTeacher,
+    String currentPath,
+  ) {
+    final navItems = isTeacher
+        ? [
+            _MobileNavItem('Dashboard', Icons.grid_view_rounded, '/home'),
+            _MobileNavItem('My Class', Icons.groups_rounded, '/students'),
+            _MobileNavItem('Attendance', Icons.fact_check_rounded, '/attendance'),
+            _MobileNavItem('Homework', Icons.assignment_rounded, '/homework'),
+            _MobileNavItem('Results', Icons.bar_chart_rounded, '/results'),
+          ]
+        : [
+            _MobileNavItem('Dashboard', Icons.grid_view_rounded, '/home'),
+            _MobileNavItem('Students', Icons.groups_rounded, '/students'),
+            _MobileNavItem('Staff', Icons.badge_rounded, '/teachers'),
+            _MobileNavItem('Fees', Icons.account_balance_wallet_rounded, '/fees'),
+            _MobileNavItem('More', Icons.menu_rounded, '/more'),
+          ];
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.cardBackground,
+        border: Border(
+          top: BorderSide(color: AppColors.border, width: 1),
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: navItems.map((item) {
+              final isSelected = item.route == '/home'
+                  ? (currentPath == '/home' || currentPath == '/')
+                  : currentPath.startsWith(item.route);
+
+              return GestureDetector(
+                onTap: () => context.go(item.route),
+                behavior: HitTestBehavior.opaque,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isSelected ? AppColors.indigo.withValues(alpha: 0.12) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        item.icon,
+                        size: 20,
+                        color: isSelected ? AppColors.indigo : AppColors.secondaryText,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        item.label,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                          color: isSelected ? AppColors.indigo : AppColors.secondaryText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _DesktopNavItem {
-  final int index;
-  final IconData activeIcon;
-  final IconData inactiveIcon;
+class _MobileNavItem {
   final String label;
+  final IconData icon;
+  final String route;
 
-  const _DesktopNavItem(this.index, this.activeIcon, this.inactiveIcon, this.label);
+  const _MobileNavItem(this.label, this.icon, this.route);
 }

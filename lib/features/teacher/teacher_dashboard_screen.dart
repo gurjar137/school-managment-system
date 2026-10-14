@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
+import '../../core/widgets/school_os_widgets.dart';
+import '../../data/models/academic_models.dart';
 
 class TeacherDashboardScreen extends ConsumerWidget {
   const TeacherDashboardScreen({super.key});
@@ -15,6 +18,8 @@ class TeacherDashboardScreen extends ConsumerWidget {
     final countAsync = ref.watch(teacherStudentCountProvider);
     final studentCount = countAsync.value ?? 0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final repo = ref.watch(schoolRepositoryProvider);
+
     final assignedClassDisplay = (user?.assignedClass != null && user!.assignedClass!.isNotEmpty)
         ? (user.assignedSection != null && user.assignedSection!.isNotEmpty && !user.assignedClass!.toLowerCase().contains(user.assignedSection!.toLowerCase()))
             ? '${user.assignedClass} - ${user.assignedSection}'
@@ -22,16 +27,35 @@ class TeacherDashboardScreen extends ConsumerWidget {
         : 'Not Assigned';
 
     return Scaffold(
+      backgroundColor: AppColors.mainBackground,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header Teacher Profile Banner
-              BentoCard(
-                padding: const EdgeInsets.all(20),
-                backgroundColor: isDark ? AppColors.darkSurface : AppColors.midnightNavy,
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF10182D),
+                      Color(0xFF1E1B4B),
+                      Color(0xFF312E81),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF10182D).withValues(alpha: 0.25),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
                 child: Column(
                   children: [
                     Row(
@@ -40,7 +64,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
                           imageUrl: user?.avatarUrl ?? '',
                           name: user?.name ?? 'Teacher',
                           radius: 32,
-                          borderColor: AppColors.softLavender,
+                          borderColor: AppColors.indigo,
                         ),
                         const SizedBox(width: 16),
                         Expanded(
@@ -52,7 +76,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
                                   Text(
                                     user?.name ?? 'Teacher',
                                     style: AppTypography.titleLarge.copyWith(
-                                      color: AppColors.pureWhite,
+                                      color: Colors.white,
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
@@ -60,13 +84,13 @@ class TeacherDashboardScreen extends ConsumerWidget {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: AppColors.mutedGreen,
+                                      color: AppColors.success,
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: Text(
-                                      'CLASS TEACHER',
-                                      style: AppTypography.labelSmall.copyWith(
-                                        color: AppColors.pureWhite,
+                                    child: const Text(
+                                      'FACULTY',
+                                      style: TextStyle(
+                                        color: Colors.white,
                                         fontSize: 9,
                                         fontWeight: FontWeight.w800,
                                       ),
@@ -76,16 +100,18 @@ class TeacherDashboardScreen extends ConsumerWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Subject: ${user?.subject ?? "Mathematics"}',
-                                style: AppTypography.bodySmall.copyWith(
-                                  color: AppColors.lavenderLight,
+                                'Subject: ${user?.subject ?? "Assigned Subjects"}',
+                                style: const TextStyle(
+                                  color: Color(0xFFCBD5E1),
                                   fontWeight: FontWeight.w600,
+                                  fontSize: 13,
                                 ),
                               ),
                               Text(
-                                user?.schoolName ?? 'St. Xavier Academy',
-                                style: AppTypography.bodySmall.copyWith(
-                                  color: AppColors.coolGrayLight,
+                                user?.schoolName ?? 'School OS',
+                                style: const TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 12,
                                 ),
                               ),
                             ],
@@ -94,21 +120,21 @@ class TeacherDashboardScreen extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 20),
-                    const Divider(color: AppColors.borderDark, height: 1),
+                    const Divider(color: Color(0xFF334155), height: 1),
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildHeaderStat('ASSIGNED CLASS', assignedClassDisplay, AppColors.lavenderLight),
-                        Container(width: 1, height: 28, color: AppColors.borderDark),
+                        _buildHeaderStat('ASSIGNED CLASS', assignedClassDisplay, const Color(0xFFEEF2FF)),
+                        Container(width: 1, height: 28, color: const Color(0xFF334155)),
                         _buildHeaderStat(
-                          'TOTAL STUDENTS',
+                          'TOTAL ENROLLED',
                           countAsync.isLoading
                               ? '...'
-                              : (assignedClassDisplay == 'Not Assigned' || (countAsync.value ?? 0) == 0)
+                              : (assignedClassDisplay == 'Not Assigned' || studentCount == 0)
                                   ? '0 Students'
-                                  : '${countAsync.value} Student${(countAsync.value ?? 0) == 1 ? '' : 's'}',
-                          AppColors.mutedGreen,
+                                  : '$studentCount Student${studentCount == 1 ? '' : 's'}',
+                          AppColors.success,
                         ),
                       ],
                     ),
@@ -119,36 +145,26 @@ class TeacherDashboardScreen extends ConsumerWidget {
 
               // Teacher Sections Grid
               const SectionHeader(title: 'Teacher Control Center'),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
 
               GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.25,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+                childAspectRatio: 1.3,
                 children: [
                   _buildSectionTile(
                     context,
                     title: assignedClassDisplay != 'Not Assigned'
                         ? 'My Class $assignedClassDisplay'
-                        : 'My Class',
-                    subtitle: (countAsync.value ?? 0) == 0
-                        ? 'No students added yet.'
-                        : '${countAsync.value} Student${(countAsync.value ?? 0) == 1 ? "" : "s"} Enrolled',
-                    icon: Icons.meeting_room_rounded,
-                    color: AppColors.softLavender,
-                    onTap: () => context.go('/students'),
-                  ),
-                  _buildSectionTile(
-                    context,
-                    title: 'View Roster',
+                        : 'My Class Roster',
                     subtitle: studentCount == 0
-                        ? 'No students added yet.'
-                        : 'Class Roster & Contacts ($studentCount)',
-                    icon: Icons.people_rounded,
-                    color: AppColors.mutedGreen,
+                        ? 'No students enrolled'
+                        : '$studentCount Student${studentCount == 1 ? "" : "s"} Enrolled',
+                    icon: Icons.groups_rounded,
+                    color: AppColors.indigo,
                     onTap: () => context.go('/students'),
                   ),
                   _buildSectionTile(
@@ -156,34 +172,42 @@ class TeacherDashboardScreen extends ConsumerWidget {
                     title: 'Take Attendance',
                     subtitle: assignedClassDisplay != 'Not Assigned'
                         ? 'Class $assignedClassDisplay Attendance'
-                        : 'Daily Attendance',
+                        : 'Daily Attendance Marking',
                     icon: Icons.fact_check_rounded,
-                    color: AppColors.midnightNavy,
+                    color: AppColors.success,
                     onTap: () => context.go('/attendance'),
                   ),
                   _buildSectionTile(
                     context,
-                    title: 'Homework',
-                    subtitle: 'Assign & Track Exercises',
+                    title: 'Homework & Tasks',
+                    subtitle: 'Assign & Track Classwork',
                     icon: Icons.assignment_rounded,
-                    color: AppColors.warmAmber,
+                    color: AppColors.warning,
                     onTap: () => context.push('/homework'),
                   ),
                   _buildSectionTile(
                     context,
-                    title: 'Marks & Results',
-                    subtitle: 'Term Evaluations',
+                    title: 'Marks & Evaluations',
+                    subtitle: 'Assessments & Grade Records',
                     icon: Icons.bar_chart_rounded,
-                    color: AppColors.softCoral,
-                    onTap: () => context.push('/exams'),
+                    color: const Color(0xFF8B5CF6),
+                    onTap: () => context.push('/results'),
                   ),
                   _buildSectionTile(
                     context,
-                    title: 'My Timetable',
-                    subtitle: 'Published Schedule',
+                    title: 'My Schedule',
+                    subtitle: 'Weekly Timetable Periods',
                     icon: Icons.calendar_today_rounded,
-                    color: AppColors.softLavender,
-                    onTap: () => context.push('/timetable'),
+                    color: AppColors.indigo,
+                    onTap: () => context.push('/schedule'),
+                  ),
+                  _buildSectionTile(
+                    context,
+                    title: 'Leave Applications',
+                    subtitle: 'Submit & Track Requests',
+                    icon: Icons.event_note_rounded,
+                    color: const Color(0xFF0EA5E9),
+                    onTap: () => context.push('/teacher-leaves'),
                   ),
                 ],
               ),
@@ -191,46 +215,91 @@ class TeacherDashboardScreen extends ConsumerWidget {
 
               // Class Notices Section
               SectionHeader(
-                title: 'Class Bulletins & Notices',
+                title: 'Official School Bulletins',
                 actionTitle: 'View All',
                 onActionTap: () => context.push('/notices'),
               ),
-              const SizedBox(height: 8),
-              BentoCard(
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppColors.softLavender.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
+              const SizedBox(height: 10),
+              FutureBuilder<List<NoticeModel>>(
+                future: repo.getNotices(),
+                builder: (context, snapshot) {
+                  final notices = snapshot.data ?? [];
+                  final latestNotice = notices.isNotEmpty ? notices.first : null;
+
+                  if (latestNotice == null) {
+                    return Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : AppColors.cardBackground,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: const Center(
+                        child: Text('No active notices at this time.', style: TextStyle(color: AppColors.secondaryText)),
+                      ),
+                    );
+                  }
+
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => context.push('/notices'),
+                    child: Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : AppColors.cardBackground,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.indigo.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.campaign_rounded, color: AppColors.indigo, size: 24),
                           ),
-                          child: const Icon(Icons.campaign_rounded, color: AppColors.softLavender, size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Mathematics Mid-Term Revision Session',
-                                style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                              Text(
-                                'Scheduled for Class 8-A students on Friday at 02:00 PM.',
-                                style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
-                              ),
-                            ],
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    SchoolOsBadge(text: latestNotice.category.toUpperCase(), color: AppColors.indigo),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      DateFormat('MMM d, yyyy').format(latestNotice.date),
+                                      style: const TextStyle(color: AppColors.secondaryText, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  latestNotice.title,
+                                  style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w700),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  latestNotice.content,
+                                  style: const TextStyle(color: AppColors.secondaryText, fontSize: 12),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                          const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.secondaryText),
+                        ],
+                      ),
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 32),
             ],
           ),
         ),
@@ -251,8 +320,8 @@ class TeacherDashboardScreen extends ConsumerWidget {
         const SizedBox(height: 2),
         Text(
           label,
-          style: AppTypography.bodySmall.copyWith(
-            color: AppColors.coolGrayLight,
+          style: const TextStyle(
+            color: Color(0xFF94A3B8),
             fontSize: 9,
             letterSpacing: 1.0,
           ),
@@ -269,9 +338,11 @@ class TeacherDashboardScreen extends ConsumerWidget {
     required Color color,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return BentoCard(
       onTap: onTap,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -279,22 +350,28 @@ class TeacherDashboardScreen extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 22),
               ),
-              const Icon(Icons.arrow_forward_rounded, color: AppColors.coolGray, size: 16),
+              const Icon(Icons.arrow_forward_rounded, color: AppColors.secondaryText, size: 16),
             ],
           ),
           const Spacer(),
-          Text(title, style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w800)),
+          Text(
+            title,
+            style: AppTypography.titleSmall.copyWith(
+              fontWeight: FontWeight.w800,
+              color: isDark ? AppColors.pureWhite : AppColors.navy,
+            ),
+          ),
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray, fontSize: 10),
+            style: const TextStyle(color: AppColors.secondaryText, fontSize: 11),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
