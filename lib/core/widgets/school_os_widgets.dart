@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../providers/app_providers.dart';
+import '../../data/models/user_model.dart';
 import 'reusable_widgets.dart';
 
 /// Premium metric card matching School OS desktop visual reference.
@@ -24,7 +25,7 @@ class SchoolOsMetricCard extends StatelessWidget {
     this.subtitle,
     this.badgeText,
     required this.icon,
-    this.iconColor = AppColors.indigo,
+    this.iconColor = AppColors.primaryAccent,
     this.iconBgColor,
     this.onTap,
   });
@@ -46,7 +47,7 @@ class SchoolOsMetricCard extends StatelessWidget {
             ? []
             : [
                 BoxShadow(
-                  color: AppColors.navy.withValues(alpha: 0.04),
+                  color: Colors.black.withValues(alpha: 0.03),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -68,22 +69,28 @@ class SchoolOsMetricCard extends StatelessWidget {
                 ),
                 child: Icon(icon, color: iconColor, size: 22),
               ),
-              if (badgeText != null && badgeText!.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    badgeText!,
-                    style: AppTypography.labelSmall.copyWith(
-                      color: iconColor,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11,
+              if (badgeText != null && badgeText!.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      badgeText!,
+                      style: AppTypography.labelSmall.copyWith(
+                        color: iconColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
+              ],
             ],
           ),
           const SizedBox(height: 16),
@@ -92,7 +99,7 @@ class SchoolOsMetricCard extends StatelessWidget {
             style: AppTypography.displayMedium.copyWith(
               fontSize: 26,
               fontWeight: FontWeight.w800,
-              color: isDark ? AppColors.pureWhite : AppColors.navy,
+              color: isDark ? AppColors.pureWhite : AppColors.primaryText,
               letterSpacing: -0.5,
             ),
             maxLines: 1,
@@ -106,13 +113,15 @@ class SchoolOsMetricCard extends StatelessWidget {
               fontWeight: FontWeight.w600,
               fontSize: 13,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           if (subtitle != null && subtitle!.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
               subtitle!,
               style: AppTypography.labelSmall.copyWith(
-                color: isDark ? AppColors.coolGrayLight : AppColors.coolGray,
+                color: isDark ? AppColors.coolGrayLight : AppColors.secondaryText,
                 fontSize: 11,
               ),
               maxLines: 1,
@@ -148,27 +157,27 @@ class SchoolOsHeroBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF10182D),
-            Color(0xFF1E1B4B),
-            Color(0xFF312E81),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: isDark ? AppColors.darkSurface : AppColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF10182D).withValues(alpha: 0.25),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.border,
+          width: 1,
+        ),
+        boxShadow: isDark
+            ? []
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -185,22 +194,22 @@ class SchoolOsHeroBanner extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppColors.indigo.withValues(alpha: 0.35),
+                            color: AppColors.softLavender,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: AppColors.indigo.withValues(alpha: 0.5),
+                              color: AppColors.primaryAccent.withValues(alpha: 0.2),
                               width: 1,
                             ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.auto_awesome_rounded, color: Colors.amberAccent, size: 14),
+                              const Icon(Icons.auto_awesome_rounded, color: AppColors.warning, size: 14),
                               const SizedBox(width: 6),
                               Text(
                                 'INSTITUTION COMMAND OS',
                                 style: AppTypography.labelSmall.copyWith(
-                                  color: Colors.white,
+                                  color: AppColors.primaryAccent,
                                   fontWeight: FontWeight.w800,
                                   fontSize: 10,
                                   letterSpacing: 1.0,
@@ -215,7 +224,7 @@ class SchoolOsHeroBanner extends StatelessWidget {
                     Text(
                       headline,
                       style: AppTypography.displayMedium.copyWith(
-                        color: Colors.white,
+                        color: isDark ? AppColors.pureWhite : AppColors.primaryText,
                         fontWeight: FontWeight.w800,
                         fontSize: 24,
                         letterSpacing: -0.5,
@@ -225,7 +234,7 @@ class SchoolOsHeroBanner extends StatelessWidget {
                     Text(
                       subtitle,
                       style: AppTypography.bodyMedium.copyWith(
-                        color: const Color(0xFFCBD5E1),
+                        color: AppColors.secondaryText,
                         fontSize: 13,
                         height: 1.4,
                       ),
@@ -238,23 +247,23 @@ class SchoolOsHeroBanner extends StatelessWidget {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
+                  color: AppColors.softBlue,
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.2),
+                    color: AppColors.primaryAccent.withValues(alpha: 0.15),
                     width: 1.5,
                   ),
                 ),
                 child: const Icon(
                   Icons.school_rounded,
-                  color: Colors.white,
+                  color: AppColors.primaryAccent,
                   size: 28,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 20),
-          const Divider(color: Color(0xFF334155), height: 1),
+          Divider(color: isDark ? AppColors.borderDark : AppColors.border, height: 1),
           const SizedBox(height: 16),
           // Quick Action items
           Wrap(
@@ -262,23 +271,30 @@ class SchoolOsHeroBanner extends StatelessWidget {
             runSpacing: 10,
             children: actions.map((item) {
               return Material(
-                color: Colors.white.withValues(alpha: 0.12),
+                color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceLight,
                 borderRadius: BorderRadius.circular(12),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
-                  hoverColor: Colors.white.withValues(alpha: 0.2),
+                  hoverColor: AppColors.softLavender,
                   onTap: item.onTap,
-                  child: Padding(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark ? AppColors.borderDark : AppColors.border,
+                        width: 1,
+                      ),
+                    ),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(item.icon, size: 16, color: Colors.white),
+                        Icon(item.icon, size: 16, color: AppColors.primaryAccent),
                         const SizedBox(width: 8),
                         Text(
                           item.label,
                           style: AppTypography.labelMedium.copyWith(
-                            color: Colors.white,
+                            color: isDark ? AppColors.pureWhite : AppColors.primaryText,
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
                           ),
@@ -344,7 +360,7 @@ class SchoolOsSectionCard extends StatelessWidget {
             ? []
             : [
                 BoxShadow(
-                  color: AppColors.navy.withValues(alpha: 0.03),
+                  color: Colors.black.withValues(alpha: 0.025),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -358,46 +374,58 @@ class SchoolOsSectionCard extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    if (icon != null) ...[
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: (iconColor ?? AppColors.indigo).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(icon, size: 18, color: iconColor ?? AppColors.indigo),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: AppTypography.titleSmall.copyWith(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14,
+                Expanded(
+                  child: Row(
+                    children: [
+                      if (icon != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: (iconColor ?? AppColors.primaryAccent).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
                           ),
+                          child: Icon(icon, size: 18, color: iconColor ?? AppColors.primaryAccent),
                         ),
-                        if (subtitle != null && subtitle!.isNotEmpty)
-                          Text(
-                            subtitle!,
-                            style: AppTypography.bodySmall.copyWith(
-                              color: AppColors.secondaryText,
-                              fontSize: 11,
-                            ),
-                          ),
+                        const SizedBox(width: 10),
                       ],
-                    ),
-                  ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: AppTypography.titleSmall.copyWith(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: isDark ? AppColors.pureWhite : AppColors.primaryText,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (subtitle != null && subtitle!.isNotEmpty)
+                              Text(
+                                subtitle!,
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: AppColors.secondaryText,
+                                  fontSize: 11,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                if (trailing != null) trailing!,
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  trailing!,
+                ],
               ],
             ),
           ),
-          const Divider(height: 1, thickness: 1),
+          Divider(height: 1, thickness: 1, color: isDark ? AppColors.borderDark : AppColors.border),
           Padding(
             padding: padding,
             child: child,
@@ -473,6 +501,8 @@ class SchoolOsTopHeader extends ConsumerWidget {
             ? user.schoolName
             : 'School Command OS');
 
+    final unreadCount = ref.watch(unreadNotificationsCountProvider).valueOrNull ?? 0;
+
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -487,61 +517,75 @@ class SchoolOsTopHeader extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          // Validated School Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceLight,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.border,
-                width: 1,
+          // Circular School Logo & School Identity with Dropdown
+          InkWell(
+            onTap: () => context.push('/school-settings'),
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.softBlue,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.primaryAccent.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(Icons.school_rounded, size: 18, color: AppColors.primaryAccent),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            schoolDisplayName,
+                            style: AppTypography.titleSmall.copyWith(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: isDark ? AppColors.pureWhite : AppColors.primaryText,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppColors.secondaryText),
+                        ],
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        'AY 2026–2027',
+                        style: AppTypography.labelSmall.copyWith(
+                          color: AppColors.secondaryText,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.verified_rounded, size: 16, color: AppColors.success),
-                const SizedBox(width: 8),
-                Text(
-                  schoolDisplayName,
-                  style: AppTypography.bodySmall.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    color: isDark ? AppColors.pureWhite : AppColors.navy,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.indigo.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'AY 2026–2027',
-                    style: AppTypography.labelSmall.copyWith(
-                      color: AppColors.indigo,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 10,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
 
-          // Global Search Bar Trigger
+          // Centered Global Search Bar Trigger
           Expanded(
             child: Center(
               child: GestureDetector(
                 onTap: onSearchTap ?? () => context.push('/global-search'),
                 child: Container(
-                  constraints: const BoxConstraints(maxWidth: 460),
-                  height: 40,
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  height: 38,
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
                     color: isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceLight,
@@ -557,7 +601,7 @@ class SchoolOsTopHeader extends ConsumerWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Search students, teachers, fees, notices... (Ctrl+K)',
+                          'Search anything... (⌘K)',
                           style: AppTypography.bodySmall.copyWith(
                             color: AppColors.secondaryText,
                             fontSize: 12,
@@ -591,17 +635,42 @@ class SchoolOsTopHeader extends ConsumerWidget {
               ),
             ),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
 
-          // Notification Bell
+          // Messages Icon
           IconButton(
-            icon: const Icon(Icons.notifications_none_rounded, size: 22, color: AppColors.secondaryText),
-            tooltip: 'Campus Notifications',
+            icon: const Icon(Icons.mail_outline_rounded, size: 20, color: AppColors.secondaryText),
+            tooltip: 'Messages & Communications',
             onPressed: () => context.push('/notifications'),
+          ),
+
+          // Notification Bell with unread badge dot
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_none_rounded, size: 21, color: AppColors.secondaryText),
+                tooltip: 'Campus Notifications',
+                onPressed: () => context.push('/notifications'),
+              ),
+              if (unreadCount > 0)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: AppColors.error,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(width: 6),
 
-          // User Profile Avatar Chip
+          // User Profile Avatar Chip with Dropdown
           GestureDetector(
             onTap: () => context.push('/profile'),
             child: MouseRegion(
@@ -623,7 +692,7 @@ class SchoolOsTopHeader extends ConsumerWidget {
                       imageUrl: user?.avatarUrl ?? '',
                       name: user?.name ?? 'Admin',
                       radius: 14,
-                      borderColor: AppColors.indigo,
+                      borderColor: AppColors.primaryAccent,
                     ),
                     const SizedBox(width: 8),
                     Column(
@@ -631,17 +700,17 @@ class SchoolOsTopHeader extends ConsumerWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          user?.name ?? 'Admin',
+                          user?.name ?? 'Lead Administrator',
                           style: AppTypography.labelMedium.copyWith(
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
-                            color: isDark ? AppColors.pureWhite : AppColors.navy,
+                            color: isDark ? AppColors.pureWhite : AppColors.primaryText,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          user?.designation ?? (user?.role.name.toUpperCase() ?? 'ADMIN'),
+                          user?.designation ?? (user?.role == UserRole.teacher ? 'Faculty' : 'Principal'),
                           style: AppTypography.labelSmall.copyWith(
                             color: AppColors.secondaryText,
                             fontSize: 9,
@@ -649,6 +718,8 @@ class SchoolOsTopHeader extends ConsumerWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppColors.secondaryText),
                   ],
                 ),
               ),

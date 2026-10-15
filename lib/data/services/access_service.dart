@@ -366,17 +366,20 @@ class AccessService {
     return List.unmodifiable(_activityLogs);
   }
 
-  void _logActivity(String title, String details, String category) {
+  void logActivity(String title, String details, String category, {String? adminName}) {
     _activityLogs.insert(
       0,
       ActivityLogModel(
         id: 'log_${DateTime.now().millisecondsSinceEpoch}',
         actionTitle: title,
         details: details,
-        adminName: 'School Administrator',
+        adminName: adminName ?? 'School Administrator',
         timestamp: DateTime.now(),
         category: category,
       ),
     );
   }
+
+  void _logActivity(String title, String details, String category, {String? adminName}) =>
+      logActivity(title, details, category, adminName: adminName);
 }

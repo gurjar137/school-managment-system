@@ -6,6 +6,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
 import '../../core/widgets/app_back_button.dart';
+import 'package:go_router/go_router.dart';
 import '../../data/models/academic_models.dart';
 
 class LeaveRequestsScreen extends ConsumerStatefulWidget {
@@ -27,6 +28,14 @@ class _LeaveRequestsScreenState extends ConsumerState<LeaveRequestsScreen> {
         leadingWidth: AppBackButton.leadingWidth,
         leading: const AppBackButton(fallbackPath: '/home'),
         title: Text('Student Leave Applications', style: AppTypography.titleLarge),
+        actions: [
+          TextButton.icon(
+            onPressed: () => context.push('/teacher-leaves'),
+            icon: const Icon(Icons.badge_rounded, size: 18),
+            label: const Text('Faculty Leaves'),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Column(
         children: [
@@ -82,7 +91,7 @@ class _LeaveRequestsScreenState extends ConsumerState<LeaveRequestsScreen> {
                                 Text(l.studentName, style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w800)),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(color: AppColors.midnightNavy.withOpacity(0.08), borderRadius: BorderRadius.circular(6)),
+                                  decoration: BoxDecoration(color: AppColors.midnightNavy.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
                                   child: Text(l.className, style: AppTypography.labelSmall),
                                 ),
                               ],
@@ -140,7 +149,7 @@ class _LeaveRequestsScreenState extends ConsumerState<LeaveRequestsScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected ? color : color.withOpacity(0.1),
+            color: isSelected ? color : color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(

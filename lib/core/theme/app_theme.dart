@@ -8,58 +8,62 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      primaryColor: AppColors.indigo,
+      primaryColor: AppColors.primaryAccent,
       scaffoldBackgroundColor: AppColors.mainBackground,
       colorScheme: const ColorScheme.light(
-        primary: AppColors.indigo,
+        primary: AppColors.primaryAccent,
         onPrimary: AppColors.pureWhite,
-        secondary: AppColors.navy,
+        secondary: AppColors.primaryText,
         onSecondary: AppColors.pureWhite,
-        surface: AppColors.pureWhite,
-        onSurface: AppColors.navy,
+        surface: AppColors.cardBackground,
+        onSurface: AppColors.primaryText,
         surfaceContainerHighest: AppColors.surfaceLight,
         error: AppColors.error,
         onError: AppColors.pureWhite,
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.warmOffWhite,
+        backgroundColor: AppColors.cardBackground,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
-        iconTheme: const IconThemeData(color: AppColors.midnightNavy),
-        titleTextStyle: AppTypography.titleLarge.copyWith(color: AppColors.midnightNavy),
+        iconTheme: const IconThemeData(color: AppColors.primaryText),
+        titleTextStyle: AppTypography.titleLarge.copyWith(color: AppColors.primaryText),
         systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
       cardTheme: CardThemeData(
-        color: AppColors.pureWhite,
+        color: AppColors.cardBackground,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.borderLight, width: 1),
+          side: const BorderSide(color: AppColors.border, width: 1),
         ),
         margin: EdgeInsets.zero,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surfaceLight,
+        fillColor: AppColors.cardBackground,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: AppColors.border, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.borderLight, width: 1),
+          borderSide: const BorderSide(color: AppColors.border, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.midnightNavy, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.primaryAccent, width: 1.5),
         ),
-        hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.coolGray),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.error, width: 1),
+        ),
+        hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.secondaryText),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.midnightNavy,
+          backgroundColor: AppColors.primaryAccent,
           foregroundColor: AppColors.pureWhite,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -71,8 +75,8 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.midnightNavy,
-          side: const BorderSide(color: AppColors.borderLight, width: 1.5),
+          foregroundColor: AppColors.primaryText,
+          side: const BorderSide(color: AppColors.border, width: 1.2),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -81,27 +85,27 @@ class AppTheme {
         ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: AppColors.pureWhite,
-        selectedItemColor: AppColors.midnightNavy,
-        unselectedItemColor: AppColors.coolGray,
+        backgroundColor: AppColors.cardBackground,
+        selectedItemColor: AppColors.primaryAccent,
+        unselectedItemColor: AppColors.secondaryText,
         type: BottomNavigationBarType.fixed,
         elevation: 8,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.surfaceLight,
-        disabledColor: AppColors.borderLight,
-        selectedColor: AppColors.midnightNavy,
+        backgroundColor: AppColors.softBlue,
+        disabledColor: AppColors.border,
+        selectedColor: AppColors.primaryAccent,
         secondarySelectedColor: AppColors.softLavender,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        labelStyle: AppTypography.labelMedium.copyWith(color: AppColors.midnightNavy),
+        labelStyle: AppTypography.labelMedium.copyWith(color: AppColors.primaryText),
         secondaryLabelStyle: AppTypography.labelMedium.copyWith(color: AppColors.pureWhite),
-        side: const BorderSide(color: AppColors.borderLight, width: 1),
+        side: const BorderSide(color: AppColors.border, width: 1),
       ),
       dividerTheme: const DividerThemeData(
-        color: AppColors.borderLight,
+        color: AppColors.border,
         thickness: 1,
         space: 1,
       ),
@@ -112,10 +116,10 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      primaryColor: AppColors.softLavender,
+      primaryColor: AppColors.primaryAccent,
       scaffoldBackgroundColor: AppColors.darkBackground,
       colorScheme: const ColorScheme.dark(
-        primary: AppColors.softLavender,
+        primary: AppColors.primaryAccent,
         onPrimary: AppColors.darkBackground,
         secondary: AppColors.lavenderDark,
         onSecondary: AppColors.pureWhite,
@@ -157,14 +161,14 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.softLavender, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.primaryAccent, width: 1.5),
         ),
         hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.coolGrayLight),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.softLavender,
-          foregroundColor: AppColors.darkBackground,
+          backgroundColor: AppColors.primaryAccent,
+          foregroundColor: AppColors.pureWhite,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
@@ -186,7 +190,7 @@ class AppTheme {
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.darkSurface,
-        selectedItemColor: AppColors.softLavender,
+        selectedItemColor: AppColors.primaryAccent,
         unselectedItemColor: AppColors.coolGrayLight,
         type: BottomNavigationBarType.fixed,
         elevation: 8,
@@ -194,8 +198,8 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.darkSurfaceVariant,
         disabledColor: AppColors.borderDark,
-        selectedColor: AppColors.softLavender,
-        secondarySelectedColor: AppColors.midnightNavy,
+        selectedColor: AppColors.primaryAccent,
+        secondarySelectedColor: AppColors.primaryText,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),

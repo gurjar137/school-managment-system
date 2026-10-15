@@ -39,10 +39,12 @@ class MoreScreen extends StatelessWidget {
           const SizedBox(height: 24),
 
           // COMMUNICATION Section
-          _buildCategoryHeader('COMMUNICATION'),
+          _buildCategoryHeader('COMMUNICATION & WORKFLOWS'),
           _buildGridGroup(context, [
             _ModuleItem('Notices Feed', Icons.campaign_outlined, AppColors.softCoral, '/notices'),
-            _ModuleItem('Leave Requests', Icons.event_busy_outlined, AppColors.amberDark, '/leave-requests'),
+            _ModuleItem('Faculty Leaves', Icons.event_note_outlined, AppColors.primaryAccent, '/teacher-leaves'),
+            _ModuleItem('Staff Meetings', Icons.video_call_outlined, AppColors.mutedGreen, '/meetings'),
+            _ModuleItem('Student Leaves', Icons.event_busy_outlined, AppColors.amberDark, '/leave-requests'),
             _ModuleItem('Notifications', Icons.notifications_none_rounded, AppColors.softLavender, '/notifications'),
           ]),
           const SizedBox(height: 24),
@@ -104,7 +106,7 @@ class MoreScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: item.color.withOpacity(0.15),
+                  color: item.color.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(item.icon, color: item.color, size: 22),

@@ -51,18 +51,23 @@ class AttendanceCorrectionModel {
 
 class TeacherLeaveModel {
   final String id;
+  final String schoolId;
   final String teacherId;
   final String teacherName;
-  final String leaveType; // "Casual", "Sick", "Earned"
+  final String leaveType; // "Casual", "Sick", "Earned", "Medical", "Emergency"
   final DateTime fromDate;
   final DateTime toDate;
   final String reason;
-  final String status; // "pending", "approved", "rejected"
+  final String status; // "pending", "approved", "rejected", "cancelled"
   final String adminRemarks;
   final DateTime appliedAt;
+  final DateTime? reviewedAt;
+  final String? reviewedBy;
+  final String? attachmentUrl;
 
   const TeacherLeaveModel({
     required this.id,
+    this.schoolId = '',
     required this.teacherId,
     required this.teacherName,
     required this.leaveType,
@@ -72,14 +77,22 @@ class TeacherLeaveModel {
     required this.status,
     this.adminRemarks = '',
     required this.appliedAt,
+    this.reviewedAt,
+    this.reviewedBy,
+    this.attachmentUrl,
   });
 
   TeacherLeaveModel copyWith({
+    String? schoolId,
     String? status,
     String? adminRemarks,
+    DateTime? reviewedAt,
+    String? reviewedBy,
+    String? attachmentUrl,
   }) {
     return TeacherLeaveModel(
       id: id,
+      schoolId: schoolId ?? this.schoolId,
       teacherId: teacherId,
       teacherName: teacherName,
       leaveType: leaveType,
@@ -89,7 +102,54 @@ class TeacherLeaveModel {
       status: status ?? this.status,
       adminRemarks: adminRemarks ?? this.adminRemarks,
       appliedAt: appliedAt,
+      reviewedAt: reviewedAt ?? this.reviewedAt,
+      reviewedBy: reviewedBy ?? this.reviewedBy,
+      attachmentUrl: attachmentUrl ?? this.attachmentUrl,
     );
+  }
+
+  factory TeacherLeaveModel.fromJson(Map<String, dynamic> json) {
+    return TeacherLeaveModel(
+      id: json['id']?.toString() ?? '',
+      schoolId: json['school_id']?.toString() ?? '',
+      teacherId: json['teacher_id']?.toString() ?? json['requester_id']?.toString() ?? '',
+      teacherName: json['teacher_name']?.toString() ?? json['requester_name']?.toString() ?? 'Faculty Member',
+      leaveType: json['leave_type']?.toString() ?? 'Casual',
+      fromDate: json['from_date'] != null
+          ? DateTime.tryParse(json['from_date'].toString()) ?? DateTime.now()
+          : (json['start_date'] != null ? DateTime.tryParse(json['start_date'].toString()) ?? DateTime.now() : DateTime.now()),
+      toDate: json['to_date'] != null
+          ? DateTime.tryParse(json['to_date'].toString()) ?? DateTime.now()
+          : (json['end_date'] != null ? DateTime.tryParse(json['end_date'].toString()) ?? DateTime.now() : DateTime.now()),
+      reason: json['reason']?.toString() ?? '',
+      status: json['status']?.toString().toLowerCase() ?? 'pending',
+      adminRemarks: json['admin_remarks']?.toString() ?? '',
+      appliedAt: json['applied_at'] != null
+          ? DateTime.tryParse(json['applied_at'].toString()) ?? DateTime.now()
+          : (json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now() : DateTime.now()),
+      reviewedAt: json['reviewed_at'] != null ? DateTime.tryParse(json['reviewed_at'].toString()) : null,
+      reviewedBy: json['reviewed_by']?.toString(),
+      attachmentUrl: json['attachment_url']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      if (schoolId.isNotEmpty) 'school_id': schoolId,
+      'teacher_id': teacherId,
+      'teacher_name': teacherName,
+      'leave_type': leaveType,
+      'from_date': fromDate.toIso8601String().substring(0, 10),
+      'to_date': toDate.toIso8601String().substring(0, 10),
+      'reason': reason,
+      'status': status,
+      'admin_remarks': adminRemarks,
+      'applied_at': appliedAt.toIso8601String(),
+      if (reviewedAt != null) 'reviewed_at': reviewedAt!.toIso8601String(),
+      if (reviewedBy != null) 'reviewed_by': reviewedBy,
+      if (attachmentUrl != null) 'attachment_url': attachmentUrl,
+    };
   }
 }
 

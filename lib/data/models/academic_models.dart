@@ -388,28 +388,71 @@ class TimetableSlotModel {
 
 class NoticeModel {
   final String id;
+  final String schoolId;
   final String title;
   final String content;
   final String category;
   final DateTime date;
   final String author;
+  final String targetAudience; // 'All Staff', 'Teachers Only', 'Parents', 'Everyone'
+  final String status; // 'Published', 'Draft', 'Archived'
   final bool isPinned;
   final bool isUnread;
+  final DateTime? expiresAt;
+  final String? attachmentUrl;
 
   const NoticeModel({
     required this.id,
+    this.schoolId = '',
     required this.title,
     required this.content,
     required this.category,
     required this.date,
     required this.author,
+    this.targetAudience = 'All Staff',
+    this.status = 'Published',
     this.isPinned = false,
     this.isUnread = false,
+    this.expiresAt,
+    this.attachmentUrl,
   });
+
+  NoticeModel copyWith({
+    String? id,
+    String? schoolId,
+    String? title,
+    String? content,
+    String? category,
+    DateTime? date,
+    String? author,
+    String? targetAudience,
+    String? status,
+    bool? isPinned,
+    bool? isUnread,
+    DateTime? expiresAt,
+    String? attachmentUrl,
+  }) {
+    return NoticeModel(
+      id: id ?? this.id,
+      schoolId: schoolId ?? this.schoolId,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      category: category ?? this.category,
+      date: date ?? this.date,
+      author: author ?? this.author,
+      targetAudience: targetAudience ?? this.targetAudience,
+      status: status ?? this.status,
+      isPinned: isPinned ?? this.isPinned,
+      isUnread: isUnread ?? this.isUnread,
+      expiresAt: expiresAt ?? this.expiresAt,
+      attachmentUrl: attachmentUrl ?? this.attachmentUrl,
+    );
+  }
 
   factory NoticeModel.fromJson(Map<String, dynamic> json) {
     return NoticeModel(
       id: json['id']?.toString() ?? '',
+      schoolId: json['school_id']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
       content: json['content']?.toString() ?? '',
       category: json['category']?.toString() ?? 'General',
@@ -417,19 +460,138 @@ class NoticeModel {
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : (json['date'] != null ? DateTime.tryParse(json['date'].toString()) ?? DateTime.now() : DateTime.now()),
       author: json['author']?.toString() ?? json['author_name']?.toString() ?? 'Administration',
+      targetAudience: json['target_audience']?.toString() ?? 'All Staff',
+      status: json['status']?.toString() ?? 'Published',
       isPinned: json['is_pinned'] == true,
       isUnread: json['is_unread'] == true,
+      expiresAt: json['expires_at'] != null ? DateTime.tryParse(json['expires_at'].toString()) : null,
+      attachmentUrl: json['attachment_url']?.toString(),
     );
   }
 
   Map<String, dynamic> toJson({String? schoolId, String? academicYearId, String? createdBy}) {
     return {
       if (id.isNotEmpty) 'id': id,
-      if (schoolId != null) 'school_id': schoolId,
+      if (schoolId != null || this.schoolId.isNotEmpty) 'school_id': schoolId ?? this.schoolId,
       if (academicYearId != null) 'academic_year_id': academicYearId,
       'title': title,
       'content': content,
+      'category': category,
+      'author': author,
+      'target_audience': targetAudience,
+      'status': status,
+      'is_pinned': isPinned,
+      if (expiresAt != null) 'expires_at': expiresAt!.toIso8601String(),
+      if (attachmentUrl != null) 'attachment_url': attachmentUrl,
       if (createdBy != null) 'created_by': createdBy,
+    };
+  }
+}
+
+class SchoolMeetingModel {
+  final String id;
+  final String schoolId;
+  final String title;
+  final String agenda;
+  final DateTime meetingDate;
+  final String startTime;
+  final String endTime;
+  final String locationOrLink;
+  final String organizerId;
+  final String organizerName;
+  final String targetAudience; // 'All Staff', 'Teachers', 'Department Heads'
+  final String status; // 'Scheduled', 'Rescheduled', 'Completed', 'Cancelled'
+  final String cancelReason;
+  final DateTime createdAt;
+
+  const SchoolMeetingModel({
+    required this.id,
+    this.schoolId = '',
+    required this.title,
+    required this.agenda,
+    required this.meetingDate,
+    required this.startTime,
+    required this.endTime,
+    required this.locationOrLink,
+    required this.organizerId,
+    required this.organizerName,
+    this.targetAudience = 'All Staff',
+    this.status = 'Scheduled',
+    this.cancelReason = '',
+    required this.createdAt,
+  });
+
+  SchoolMeetingModel copyWith({
+    String? id,
+    String? schoolId,
+    String? title,
+    String? agenda,
+    DateTime? meetingDate,
+    String? startTime,
+    String? endTime,
+    String? locationOrLink,
+    String? organizerId,
+    String? organizerName,
+    String? targetAudience,
+    String? status,
+    String? cancelReason,
+    DateTime? createdAt,
+  }) {
+    return SchoolMeetingModel(
+      id: id ?? this.id,
+      schoolId: schoolId ?? this.schoolId,
+      title: title ?? this.title,
+      agenda: agenda ?? this.agenda,
+      meetingDate: meetingDate ?? this.meetingDate,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      locationOrLink: locationOrLink ?? this.locationOrLink,
+      organizerId: organizerId ?? this.organizerId,
+      organizerName: organizerName ?? this.organizerName,
+      targetAudience: targetAudience ?? this.targetAudience,
+      status: status ?? this.status,
+      cancelReason: cancelReason ?? this.cancelReason,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  factory SchoolMeetingModel.fromJson(Map<String, dynamic> json) {
+    return SchoolMeetingModel(
+      id: json['id']?.toString() ?? '',
+      schoolId: json['school_id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      agenda: json['agenda']?.toString() ?? json['description']?.toString() ?? '',
+      meetingDate: json['meeting_date'] != null
+          ? DateTime.tryParse(json['meeting_date'].toString()) ?? DateTime.now()
+          : (json['start_datetime'] != null ? DateTime.tryParse(json['start_datetime'].toString()) ?? DateTime.now() : DateTime.now()),
+      startTime: json['start_time']?.toString() ?? '10:00 AM',
+      endTime: json['end_time']?.toString() ?? '11:00 AM',
+      locationOrLink: json['location_or_link']?.toString() ?? json['location']?.toString() ?? 'Main Conference Hall',
+      organizerId: json['organizer_id']?.toString() ?? json['created_by']?.toString() ?? '',
+      organizerName: json['organizer_name']?.toString() ?? 'School Administration',
+      targetAudience: json['target_audience']?.toString() ?? 'All Staff',
+      status: json['status']?.toString() ?? 'Scheduled',
+      cancelReason: json['cancel_reason']?.toString() ?? '',
+      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now() : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson({String? schoolId}) {
+    return {
+      'id': id,
+      if (schoolId != null || this.schoolId.isNotEmpty) 'school_id': schoolId ?? this.schoolId,
+      'title': title,
+      'agenda': agenda,
+      'meeting_date': meetingDate.toIso8601String().substring(0, 10),
+      'start_time': startTime,
+      'end_time': endTime,
+      'location_or_link': locationOrLink,
+      'organizer_id': organizerId,
+      'organizer_name': organizerName,
+      'target_audience': targetAudience,
+      'status': status,
+      'cancel_reason': cancelReason,
+      'created_at': createdAt.toIso8601String(),
     };
   }
 }
@@ -643,18 +805,90 @@ class TransportRouteModel {
 
 class NotificationModel {
   final String id;
+  final String schoolId;
+  final String? recipientId;
+  final String? recipientRole;
   final String title;
   final String message;
   final DateTime timestamp;
   final String category;
   final bool isUnread;
+  final String? relatedRecordId;
+  final String? relatedRecordType; // 'leave', 'notice', 'meeting'
 
   const NotificationModel({
     required this.id,
+    this.schoolId = '',
+    this.recipientId,
+    this.recipientRole,
     required this.title,
     required this.message,
     required this.timestamp,
     required this.category,
     this.isUnread = true,
+    this.relatedRecordId,
+    this.relatedRecordType,
   });
+
+  NotificationModel copyWith({
+    String? id,
+    String? schoolId,
+    String? recipientId,
+    String? recipientRole,
+    String? title,
+    String? message,
+    DateTime? timestamp,
+    String? category,
+    bool? isUnread,
+    String? relatedRecordId,
+    String? relatedRecordType,
+  }) {
+    return NotificationModel(
+      id: id ?? this.id,
+      schoolId: schoolId ?? this.schoolId,
+      recipientId: recipientId ?? this.recipientId,
+      recipientRole: recipientRole ?? this.recipientRole,
+      title: title ?? this.title,
+      message: message ?? this.message,
+      timestamp: timestamp ?? this.timestamp,
+      category: category ?? this.category,
+      isUnread: isUnread ?? this.isUnread,
+      relatedRecordId: relatedRecordId ?? this.relatedRecordId,
+      relatedRecordType: relatedRecordType ?? this.relatedRecordType,
+    );
+  }
+
+  factory NotificationModel.fromJson(Map<String, dynamic> json) {
+    return NotificationModel(
+      id: json['id']?.toString() ?? '',
+      schoolId: json['school_id']?.toString() ?? '',
+      recipientId: json['user_id']?.toString() ?? json['recipient_id']?.toString(),
+      recipientRole: json['recipient_role']?.toString(),
+      title: json['title']?.toString() ?? '',
+      message: json['message']?.toString() ?? '',
+      timestamp: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : (json['timestamp'] != null ? DateTime.tryParse(json['timestamp'].toString()) ?? DateTime.now() : DateTime.now()),
+      category: json['category']?.toString() ?? 'General',
+      isUnread: json['is_unread'] != false,
+      relatedRecordId: json['related_record_id']?.toString(),
+      relatedRecordType: json['related_record_type']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson({String? schoolId}) {
+    return {
+      'id': id,
+      if (schoolId != null || this.schoolId.isNotEmpty) 'school_id': schoolId ?? this.schoolId,
+      if (recipientId != null) 'user_id': recipientId,
+      if (recipientRole != null) 'recipient_role': recipientRole,
+      'title': title,
+      'message': message,
+      'category': category,
+      'is_unread': isUnread,
+      if (relatedRecordId != null) 'related_record_id': relatedRecordId,
+      if (relatedRecordType != null) 'related_record_type': relatedRecordType,
+      'created_at': timestamp.toIso8601String(),
+    };
+  }
 }

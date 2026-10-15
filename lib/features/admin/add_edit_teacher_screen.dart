@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
@@ -9,6 +10,7 @@ import '../../data/models/academic_models.dart';
 import '../../data/models/staff_model.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/class_section_models.dart';
+import '../../data/models/salary_models.dart';
 import '../../core/widgets/app_back_button.dart';
 
 class AddEditTeacherScreen extends ConsumerStatefulWidget {
@@ -40,6 +42,16 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
   late TextEditingController _confirmPasswordController;
   late TextEditingController _classController;
   late TextEditingController _sectionController;
+  late TextEditingController _baseSalaryController;
+  late TextEditingController _hraController;
+  late TextEditingController _transportController;
+  late TextEditingController _pfController;
+  late TextEditingController _taxController;
+
+  String _salaryType = 'Monthly';
+  String _paymentSchedule = 'Monthly';
+  DateTime _effectiveDate = DateTime.now();
+  bool _isSalaryActive = true;
 
   bool _isSaving = false;
   bool _obscurePassword = true;
@@ -78,9 +90,93 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
     _classController = TextEditingController(text: t?.className ?? s?.assignedClass ?? '');
     _sectionController = TextEditingController(text: t?.sectionName ?? s?.assignedSection ?? '');
 
+    _baseSalaryController = TextEditingController();
+    _hraController = TextEditingController();
+    _transportController = TextEditingController();
+    _pfController = TextEditingController();
+    _taxController = TextEditingController();
+
     if (isTeacherMode) {
       _fetchClassesForSchool();
     }
+
+    final editStaffId = widget.teacherToEdit?.id ?? widget.staffToEdit?.id;
+    if (editStaffId != null && editStaffId.isNotEmpty) {
+      _loadExistingSalary(editStaffId);
+    }
+  }
+
+  Future<void> _loadExistingSalary(String staffId) async {
+    try {
+      final struct = await ref.read(salaryServiceProvider).getSalaryStructure(staffId);
+      if (struct != null && mounted) {
+        setState(() {
+          _baseSalaryController.text = struct.basicSalary > 0 ? struct.basicSalary.toStringAsFixed(0) : '';
+          final hra = struct.allowances.firstWhere((a) => a.type == 'HRA', orElse: () => const SalaryAllowance(type: 'HRA', amount: 0.0)).amount;
+          if (hra > 0) _hraController.text = hra.toStringAsFixed(0);
+          final transport = struct.allowances.firstWhere((a) => a.type == 'Transport', orElse: () => const SalaryAllowance(type: 'Transport', amount: 0.0)).amount;
+          if (transport > 0) _transportController.text = transport.toStringAsFixed(0);
+          final pf = struct.deductions.firstWhere((d) => d.type == 'PF', orElse: () => const SalaryDeduction(type: 'PF', amount: 0.0)).amount;
+          if (pf > 0) _pfController.text = pf.toStringAsFixed(0);
+          final tax = struct.deductions.firstWhere((d) => d.type == 'Tax', orElse: () => const SalaryDeduction(type: 'Tax', amount: 0.0)).amount;
+          if (tax > 0) _taxController.text = tax.toStringAsFixed(0);
+          _salaryType = struct.salaryType;
+          _paymentSchedule = struct.paymentSchedule;
+          _effectiveDate = struct.effectiveFrom;
+          _isSalaryActive = struct.isActive;
+        });
+      }
+    } catch (_) {}
+  }
+
+  double _calculateNet() {
+    final base = double.tryParse(_baseSalaryController.text.trim()) ?? 0.0;
+    final hra = double.tryParse(_hraController.text.trim()) ?? 0.0;
+    final transport = double.tryParse(_transportController.text.trim()) ?? 0.0;
+    final pf = double.tryParse(_pfController.text.trim()) ?? 0.0;
+    final tax = double.tryParse(_taxController.text.trim()) ?? 0.0;
+    final net = base + hra + transport - pf - tax;
+    return net > 0 ? net : 0.0;
+  }
+
+  Future<void> _saveSalaryStructureIfConfigured({
+    required String schoolId,
+    required String staffId,
+    required String staffName,
+  }) async {
+    final baseSalaryText = _baseSalaryController.text.trim();
+    if (baseSalaryText.isEmpty) return;
+    final baseSalary = double.tryParse(baseSalaryText) ?? 0.0;
+    if (baseSalary <= 0) return;
+
+    final allowances = <SalaryAllowance>[];
+    final hraVal = double.tryParse(_hraController.text.trim()) ?? 0.0;
+    if (hraVal > 0) allowances.add(SalaryAllowance(type: 'HRA', amount: hraVal));
+    final transVal = double.tryParse(_transportController.text.trim()) ?? 0.0;
+    if (transVal > 0) allowances.add(SalaryAllowance(type: 'Transport', amount: transVal));
+
+    final deductions = <SalaryDeduction>[];
+    final pfVal = double.tryParse(_pfController.text.trim()) ?? 0.0;
+    if (pfVal > 0) deductions.add(SalaryDeduction(type: 'PF', amount: pfVal));
+    final taxVal = double.tryParse(_taxController.text.trim()) ?? 0.0;
+    if (taxVal > 0) deductions.add(SalaryDeduction(type: 'Tax', amount: taxVal));
+
+    final structure = SalaryStructure(
+      id: 'sal_${schoolId}_$staffId',
+      schoolId: schoolId,
+      staffProfileId: staffId,
+      staffName: staffName,
+      salaryType: _salaryType,
+      basicSalary: baseSalary,
+      allowances: allowances,
+      deductions: deductions,
+      effectiveFrom: _effectiveDate,
+      paymentSchedule: _paymentSchedule,
+      isActive: _isSalaryActive,
+      createdAt: DateTime.now(),
+    );
+
+    await ref.read(salaryServiceProvider).updateSalaryStructure(staffId, structure);
   }
 
   Future<void> _fetchClassesForSchool() async {
@@ -109,6 +205,11 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
     _confirmPasswordController.dispose();
     _classController.dispose();
     _sectionController.dispose();
+    _baseSalaryController.dispose();
+    _hraController.dispose();
+    _transportController.dispose();
+    _pfController.dispose();
+    _taxController.dispose();
     super.dispose();
   }
 
@@ -176,6 +277,12 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
           );
         }
 
+        await _saveSalaryStructureIfConfigured(
+          schoolId: activeSchoolId,
+          staffId: recordId,
+          staffName: _nameController.text.trim(),
+        );
+
         if (mounted) {
           setState(() => _isSaving = false);
           ScaffoldMessenger.of(context).showSnackBar(
@@ -201,6 +308,8 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
           role: targetRole,
         );
 
+        final createdStaffId = isTeacherMode ? _empIdController.text.trim() : staffProfile.id;
+
         if (isTeacherMode) {
           final newTeacher = TeacherModel(
             id: _empIdController.text.trim(),
@@ -220,6 +329,12 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
           );
           await teacherService.addTeacher(newTeacher);
         }
+
+        await _saveSalaryStructureIfConfigured(
+          schoolId: activeSchoolId,
+          staffId: createdStaffId,
+          staffName: _nameController.text.trim(),
+        );
 
         if (mounted) {
           setState(() => _isSaving = false);
@@ -654,9 +769,212 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
                   ),
                 ],
                 const SizedBox(height: 32),
-              ] else ...[
-                const SizedBox(height: 12),
               ],
+
+              // Salary & Compensation Configuration
+              Text('SALARY & COMPENSATION (INR)', style: AppTypography.labelSmall.copyWith(color: AppColors.coolGray)),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.coolGray.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.coolGray.withOpacity(0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: _baseSalaryController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Monthly Base Salary (Agreed Basic Amount)',
+                        hintText: 'e.g. 35000',
+                        prefixIcon: Icon(Icons.currency_rupee_rounded),
+                        helperText: 'Leave empty to keep as "Salary Not Configured"',
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return null;
+                        final val = double.tryParse(v.trim());
+                        if (val == null || val < 0) return 'Enter a valid non-negative amount';
+                        return null;
+                      },
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _salaryType,
+                            decoration: const InputDecoration(
+                              labelText: 'Salary Type',
+                              prefixIcon: Icon(Icons.category_rounded),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'Monthly', child: Text('Monthly')),
+                              DropdownMenuItem(value: 'Hourly', child: Text('Hourly')),
+                              DropdownMenuItem(value: 'Daily', child: Text('Daily')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) setState(() => _salaryType = val);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: _effectiveDate,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2035),
+                              );
+                              if (picked != null) {
+                                setState(() => _effectiveDate = picked);
+                              }
+                            },
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Effective From',
+                                prefixIcon: Icon(Icons.calendar_today_rounded),
+                              ),
+                              child: Text(DateFormat('dd MMM yyyy').format(_effectiveDate)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _hraController,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            decoration: const InputDecoration(
+                              labelText: 'HRA Allowance (₹)',
+                              hintText: '0',
+                              prefixIcon: Icon(Icons.home_work_outlined),
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return null;
+                              final val = double.tryParse(v.trim());
+                              if (val == null || val < 0) return 'Invalid amount';
+                              return null;
+                            },
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _transportController,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            decoration: const InputDecoration(
+                              labelText: 'Transport Allowance (₹)',
+                              hintText: '0',
+                              prefixIcon: Icon(Icons.directions_bus_outlined),
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return null;
+                              final val = double.tryParse(v.trim());
+                              if (val == null || val < 0) return 'Invalid amount';
+                              return null;
+                            },
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _pfController,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            decoration: const InputDecoration(
+                              labelText: 'PF Deduction (₹)',
+                              hintText: '0',
+                              prefixIcon: Icon(Icons.shield_outlined),
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return null;
+                              final val = double.tryParse(v.trim());
+                              if (val == null || val < 0) return 'Invalid amount';
+                              return null;
+                            },
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _taxController,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            decoration: const InputDecoration(
+                              labelText: 'Tax / Other Deduction (₹)',
+                              hintText: '0',
+                              prefixIcon: Icon(Icons.money_off_rounded),
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return null;
+                              final val = double.tryParse(v.trim());
+                              if (val == null || val < 0) return 'Invalid amount';
+                              return null;
+                            },
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.softLavender.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.softLavender.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Projected Monthly Net Salary:', style: AppTypography.bodySmall.copyWith(color: AppColors.deepSlate)),
+                              Text(
+                                _baseSalaryController.text.trim().isEmpty
+                                    ? 'Salary Not Configured'
+                                    : '₹ ${_calculateNet().toStringAsFixed(0)} / month',
+                                style: AppTypography.titleMedium.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: _baseSalaryController.text.trim().isEmpty
+                                      ? AppColors.softCoral
+                                      : AppColors.mutedGreen,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Switch(
+                            value: _isSalaryActive,
+                            activeColor: AppColors.mutedGreen,
+                            onChanged: (val) => setState(() => _isSalaryActive = val),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
 
               SizedBox(
                 width: double.infinity,

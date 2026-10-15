@@ -43,6 +43,7 @@ import '../../features/parents/parent_child_result_screen.dart';
 import '../../features/homework/homework_screen.dart';
 import '../../features/homework/create_homework_screen.dart';
 import '../../features/notices/notices_screen.dart';
+import '../../features/meetings/meetings_screen.dart';
 import '../../features/leave_requests/leave_requests_screen.dart';
 import '../../features/library/library_screen.dart';
 import '../../features/transport/transport_screen.dart';
@@ -463,6 +464,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/notices',
         builder: (context, state) => const NoticesScreen(),
+      ),
+      GoRoute(
+        path: '/meetings',
+        builder: (context, state) => const MeetingsScreen(),
       ),
       GoRoute(
         path: '/leave-requests',

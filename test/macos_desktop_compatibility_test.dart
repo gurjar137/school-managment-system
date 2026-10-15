@@ -75,9 +75,9 @@ void main() {
       // SALARY IS NEVER DISPLAYED
       expect(find.text('Salary'), findsNothing);
 
-      // Verify User footer info and Logout button
-      expect(find.text('Lead Administrator'), findsOneWidget);
-      expect(find.text('Principal'), findsOneWidget);
+      // Verify User footer info and Logout button (Profile info appears in both Top Header and Sidebar)
+      expect(find.text('Lead Administrator'), findsNWidgets(2));
+      expect(find.text('Principal'), findsNWidgets(2));
       expect(find.byIcon(Icons.logout_rounded), findsOneWidget);
 
       // Content area
@@ -256,10 +256,14 @@ class _DesktopMockAuthNotifier extends StateNotifier<UserModel?> implements Auth
   void setUserProfile(UserProfileModel profile) {}
 
   @override
+  Future<void> refreshProfile() async {}
+
+  @override
   void login(UserRole role) {}
 
   @override
-  void logout() {
+  Future<void> logout() async {
     state = null;
   }
 }
+

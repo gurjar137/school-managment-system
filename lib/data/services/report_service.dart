@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/config/supabase_config.dart';
+import 'salary_service.dart';
 
 class StudentReportSummary {
   final int totalStudents;
@@ -163,6 +164,16 @@ class ReportService {
         debugPrint('[ReportService getSalaryReport error]: $e');
       }
     }
+
+    // Dual-tier fallback to SalaryService cached payrolls/payments
+    try {
+      final metrics = await SalaryService().getSalaryDashboardMetrics();
+      return SalaryReportSummary(
+        monthlyPayrollExpense: metrics.monthlyPayrollExpense,
+        paidSalariesTotal: metrics.paidSalariesTotal,
+        pendingSalariesTotal: metrics.pendingSalariesTotal,
+      );
+    } catch (_) {}
 
     return SalaryReportSummary(
       monthlyPayrollExpense: 0.0,

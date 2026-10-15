@@ -8,6 +8,7 @@ import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
 import '../../core/widgets/school_os_widgets.dart';
 import '../../data/models/academic_models.dart';
+import '../dashboard/widgets/dashboard_charts.dart';
 
 class TeacherDashboardScreen extends ConsumerWidget {
   const TeacherDashboardScreen({super.key});
@@ -19,6 +20,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
     final studentCount = countAsync.value ?? 0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final repo = ref.watch(schoolRepositoryProvider);
+    final attendancePointsAsync = ref.watch(dashboardAttendanceTrendProvider);
 
     final assignedClassDisplay = (user?.assignedClass != null && user!.assignedClass!.isNotEmpty)
         ? (user.assignedSection != null && user.assignedSection!.isNotEmpty && !user.assignedClass!.toLowerCase().contains(user.assignedSection!.toLowerCase()))
@@ -27,34 +29,32 @@ class TeacherDashboardScreen extends ConsumerWidget {
         : 'Not Assigned';
 
     return Scaffold(
-      backgroundColor: AppColors.mainBackground,
+      backgroundColor: isDark ? AppColors.darkBackground : AppColors.mainBackground,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Teacher Profile Banner
+              // Header Teacher Profile Banner (Light-first design)
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF10182D),
-                      Color(0xFF1E1B4B),
-                      Color(0xFF312E81),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  color: isDark ? AppColors.darkSurface : AppColors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF10182D).withValues(alpha: 0.25),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
+                  border: Border.all(
+                    color: isDark ? AppColors.borderDark : AppColors.border,
+                    width: 1,
+                  ),
+                  boxShadow: isDark
+                      ? []
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                 ),
                 child: Column(
                   children: [
@@ -64,7 +64,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
                           imageUrl: user?.avatarUrl ?? '',
                           name: user?.name ?? 'Teacher',
                           radius: 32,
-                          borderColor: AppColors.indigo,
+                          borderColor: AppColors.primaryAccent,
                         ),
                         const SizedBox(width: 16),
                         Expanded(
@@ -76,7 +76,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
                                   Text(
                                     user?.name ?? 'Teacher',
                                     style: AppTypography.titleLarge.copyWith(
-                                      color: Colors.white,
+                                      color: isDark ? AppColors.pureWhite : AppColors.primaryText,
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
@@ -84,14 +84,15 @@ class TeacherDashboardScreen extends ConsumerWidget {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: AppColors.success,
+                                      color: AppColors.softMint,
                                       borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
                                     ),
-                                    child: const Text(
+                                    child: Text(
                                       'FACULTY',
                                       style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9,
+                                        color: AppColors.success,
+                                        fontSize: 10,
                                         fontWeight: FontWeight.w800,
                                       ),
                                     ),
@@ -102,7 +103,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
                               Text(
                                 'Subject: ${user?.subject ?? "Assigned Subjects"}',
                                 style: const TextStyle(
-                                  color: Color(0xFFCBD5E1),
+                                  color: AppColors.secondaryText,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 13,
                                 ),
@@ -110,7 +111,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
                               Text(
                                 user?.schoolName ?? 'School OS',
                                 style: const TextStyle(
-                                  color: Color(0xFF94A3B8),
+                                  color: AppColors.secondaryText,
                                   fontSize: 12,
                                 ),
                               ),
@@ -120,13 +121,18 @@ class TeacherDashboardScreen extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 20),
-                    const Divider(color: Color(0xFF334155), height: 1),
+                    Divider(color: isDark ? AppColors.borderDark : AppColors.border, height: 1),
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildHeaderStat('ASSIGNED CLASS', assignedClassDisplay, const Color(0xFFEEF2FF)),
-                        Container(width: 1, height: 28, color: const Color(0xFF334155)),
+                        _buildHeaderStat(
+                          'ASSIGNED CLASS',
+                          assignedClassDisplay,
+                          AppColors.primaryAccent,
+                          isDark,
+                        ),
+                        Container(width: 1, height: 28, color: isDark ? AppColors.borderDark : AppColors.border),
                         _buildHeaderStat(
                           'TOTAL ENROLLED',
                           countAsync.isLoading
@@ -135,6 +141,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
                                   ? '0 Students'
                                   : '$studentCount Student${studentCount == 1 ? '' : 's'}',
                           AppColors.success,
+                          isDark,
                         ),
                       ],
                     ),
@@ -143,7 +150,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
 
-              // Teacher Sections Grid
+              // Teacher Control Center Grid
               const SectionHeader(title: 'Teacher Control Center'),
               const SizedBox(height: 10),
 
@@ -164,7 +171,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
                         ? 'No students enrolled'
                         : '$studentCount Student${studentCount == 1 ? "" : "s"} Enrolled',
                     icon: Icons.groups_rounded,
-                    color: AppColors.indigo,
+                    color: AppColors.primaryAccent,
                     onTap: () => context.go('/students'),
                   ),
                   _buildSectionTile(
@@ -198,7 +205,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
                     title: 'My Schedule',
                     subtitle: 'Weekly Timetable Periods',
                     icon: Icons.calendar_today_rounded,
-                    color: AppColors.indigo,
+                    color: AppColors.primaryAccent,
                     onTap: () => context.push('/schedule'),
                   ),
                   _buildSectionTile(
@@ -210,6 +217,23 @@ class TeacherDashboardScreen extends ConsumerWidget {
                     onTap: () => context.push('/teacher-leaves'),
                   ),
                 ],
+              ),
+              const SizedBox(height: 24),
+
+              // Class Attendance Telemetry Widget
+              SchoolOsSectionCard(
+                title: 'Weekly Class Attendance Trends',
+                subtitle: 'Attendance consistency for enrolled students this week',
+                icon: Icons.analytics_rounded,
+                iconColor: AppColors.primaryAccent,
+                trailing: TextButton(
+                  child: const Text('View Analytics', style: TextStyle(color: AppColors.primaryAccent, fontSize: 12, fontWeight: FontWeight.w600)),
+                  onPressed: () => context.push('/attendance-analytics'),
+                ),
+                child: DashboardAttendanceTrendChart(
+                  points: attendancePointsAsync.valueOrNull ?? const [],
+                  isLoading: attendancePointsAsync.isLoading,
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -232,7 +256,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: isDark ? AppColors.darkSurface : AppColors.cardBackground,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(color: isDark ? AppColors.borderDark : AppColors.border),
                       ),
                       child: const Center(
                         child: Text('No active notices at this time.', style: TextStyle(color: AppColors.secondaryText)),
@@ -248,17 +272,17 @@ class TeacherDashboardScreen extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: isDark ? AppColors.darkSurface : AppColors.cardBackground,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(color: isDark ? AppColors.borderDark : AppColors.border),
                       ),
                       child: Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: AppColors.indigo.withValues(alpha: 0.12),
+                              color: AppColors.softLavender,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.campaign_rounded, color: AppColors.indigo, size: 24),
+                            child: const Icon(Icons.campaign_rounded, color: AppColors.primaryAccent, size: 24),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -267,7 +291,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
                               children: [
                                 Row(
                                   children: [
-                                    SchoolOsBadge(text: latestNotice.category.toUpperCase(), color: AppColors.indigo),
+                                    SchoolOsBadge(text: latestNotice.category.toUpperCase(), color: AppColors.primaryAccent),
                                     const SizedBox(width: 8),
                                     Text(
                                       DateFormat('MMM d, yyyy').format(latestNotice.date),
@@ -307,7 +331,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeaderStat(String label, String value, Color color) {
+  Widget _buildHeaderStat(String label, String value, Color color, bool isDark) {
     return Column(
       children: [
         Text(
@@ -320,10 +344,11 @@ class TeacherDashboardScreen extends ConsumerWidget {
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(
-            color: Color(0xFF94A3B8),
-            fontSize: 9,
-            letterSpacing: 1.0,
+          style: TextStyle(
+            color: isDark ? AppColors.coolGrayLight : AppColors.secondaryText,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
           ),
         ),
       ],
@@ -365,7 +390,7 @@ class TeacherDashboardScreen extends ConsumerWidget {
             title,
             style: AppTypography.titleSmall.copyWith(
               fontWeight: FontWeight.w800,
-              color: isDark ? AppColors.pureWhite : AppColors.navy,
+              color: isDark ? AppColors.pureWhite : AppColors.primaryText,
             ),
           ),
           const SizedBox(height: 2),

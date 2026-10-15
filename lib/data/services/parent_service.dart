@@ -80,10 +80,17 @@ class ParentService {
   }
 
   Future<String> resolveActiveSchoolId([String? schoolId]) async {
-    return TenantResolver.resolveActiveSchoolId(
-      client: _client,
-      requestedSchoolId: schoolId,
-    );
+    try {
+      return await TenantResolver.resolveActiveSchoolId(
+        client: _client,
+        requestedSchoolId: schoolId,
+      );
+    } catch (e) {
+      if (!kReleaseMode) {
+        return (schoolId != null && schoolId.isNotEmpty) ? schoolId : 'offline_mock_school';
+      }
+      rethrow;
+    }
   }
 
   // --- FETCH PARENTS ---

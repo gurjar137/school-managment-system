@@ -23,8 +23,8 @@ class BentoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = backgroundColor ?? (isDark ? AppColors.darkSurface : AppColors.pureWhite);
-    final bd = border ?? Border.all(color: isDark ? AppColors.borderDark : AppColors.borderLight, width: 1);
+    final bg = backgroundColor ?? (isDark ? AppColors.darkSurface : AppColors.cardBackground);
+    final bd = border ?? Border.all(color: isDark ? AppColors.borderDark : AppColors.border, width: 1);
 
     Widget content = AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -37,7 +37,7 @@ class BentoCard extends StatelessWidget {
             ? []
             : [
                 BoxShadow(
-                  color: AppColors.navy.withValues(alpha: 0.04),
+                  color: Colors.black.withValues(alpha: 0.025),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 )

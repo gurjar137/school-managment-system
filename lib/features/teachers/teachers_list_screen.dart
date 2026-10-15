@@ -6,6 +6,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
 import '../../data/models/academic_models.dart';
+import '../../data/models/salary_models.dart';
 
 class TeachersListScreen extends ConsumerStatefulWidget {
   const TeachersListScreen({super.key});
@@ -133,6 +134,51 @@ class _TeachersListScreenState extends ConsumerState<TeachersListScreen> {
                                       const SizedBox(height: 4),
                                       Text('Subjects: ${t.subjects.join(", ")}', style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray)),
                                       Text('Assigned Class: ${t.assignedClass}', style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray)),
+                                      if (canManage) ...[
+                                        const SizedBox(height: 6),
+                                        FutureBuilder<SalaryStructure?>(
+                                          future: ref.read(salaryServiceProvider).getSalaryStructure(t.id),
+                                          builder: (context, salarySnapshot) {
+                                            final struct = salarySnapshot.data;
+                                            final isConfigured = struct != null && struct.basicSalary > 0;
+                                            return Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: isConfigured
+                                                    ? AppColors.mutedGreen.withValues(alpha: 0.12)
+                                                    : Colors.amber.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(
+                                                  color: isConfigured
+                                                      ? AppColors.mutedGreen.withValues(alpha: 0.3)
+                                                      : Colors.amber.withValues(alpha: 0.4),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    isConfigured ? Icons.currency_rupee_rounded : Icons.info_outline_rounded,
+                                                    size: 13,
+                                                    color: isConfigured ? AppColors.mutedGreen : Colors.amber.shade900,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    isConfigured
+                                                        ? '₹${struct.netSalary.toStringAsFixed(0)} / mo'
+                                                        : 'Salary Not Configured',
+                                                    style: AppTypography.labelSmall.copyWith(
+                                                      color: isConfigured ? AppColors.mutedGreen : Colors.amber.shade900,
+                                                      fontWeight: FontWeight.w700,
+                                                      fontSize: 10,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -142,6 +188,14 @@ class _TeachersListScreenState extends ConsumerState<TeachersListScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
+                                if (canManage) ...[
+                                  OutlinedButton.icon(
+                                    onPressed: () => context.push('/admin/salary'),
+                                    icon: const Icon(Icons.payments_outlined, size: 16),
+                                    label: const Text('Salary'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
                                 ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.midnightNavy,

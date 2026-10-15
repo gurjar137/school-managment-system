@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/config/supabase_config.dart';
 import '../models/student_model.dart';
@@ -8,6 +10,7 @@ import '../services/student_service.dart';
 import '../services/teacher_service.dart';
 import '../services/library_service.dart';
 import '../services/transport_service.dart';
+import '../services/access_service.dart';
 import '../mock/mock_data.dart';
 import '../../core/utils/teacher_assignment_parser.dart';
 
@@ -16,12 +19,14 @@ class SchoolRepository {
   final TeacherService _teacherService;
   final LibraryService _libraryService;
   final TransportService _transportService;
+  final AccessService _accessService = AccessService();
   final List<ClassroomModel> _classrooms = [];
   final List<HomeworkModel> _homework = [];
   final List<ExamModel> _exams = [];
   final List<NoticeModel> _notices = [];
   final List<LeaveRequestModel> _leaveRequests = [];
   final List<FeeRecordModel> _fees = [];
+  final List<NotificationModel> _notifications = [];
 
   SchoolRepository({
     StudentService? studentService,
@@ -307,85 +312,270 @@ class SchoolRepository {
     return _exams;
   }
 
-  Future<List<NoticeModel>> getNotices({String? schoolId}) async {
-    final client = _client;
-    if (client != null && SupabaseConfig.isConfigured) {
-      try {
-        final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
-            ? schoolId
-            : await _studentService.fetchActiveSchoolId();
+  String _noticesCacheKey([String? schoolId]) => 'cached_school_notices_${schoolId?.trim() ?? "default"}';
+  String _notificationsCacheKey([String? schoolId]) => 'cached_school_notifications_${schoolId?.trim() ?? "default"}';
 
+  Future<void> _persistNotices([String? schoolId]) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = _noticesCacheKey(schoolId);
+      final jsonList = _notices.map((n) => n.toJson(schoolId: schoolId)).toList();
+      await prefs.setString(key, jsonEncode(jsonList));
+    } catch (e) {
+      debugPrint('[SchoolRepository Persist Notices Warning]: $e');
+    }
+  }
+
+  Future<void> _restoreNotices([String? schoolId]) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = _noticesCacheKey(schoolId);
+      final raw = prefs.getString(key);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map<String, dynamic>) {
+              final model = NoticeModel.fromJson(item);
+              if (!_notices.any((n) => n.id == model.id)) {
+                _notices.add(model);
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[SchoolRepository Restore Notices Warning]: $e');
+    }
+  }
+
+  Future<void> _persistNotifications([String? schoolId]) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = _notificationsCacheKey(schoolId);
+      final jsonList = _notifications.map((n) => n.toJson(schoolId: schoolId)).toList();
+      await prefs.setString(key, jsonEncode(jsonList));
+    } catch (e) {
+      debugPrint('[SchoolRepository Persist Notifications Warning]: $e');
+    }
+  }
+
+  Future<void> _restoreNotifications([String? schoolId]) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = _notificationsCacheKey(schoolId);
+      final raw = prefs.getString(key);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map<String, dynamic>) {
+              final model = NotificationModel.fromJson(item);
+              if (!_notifications.any((n) => n.id == model.id)) {
+                _notifications.add(model);
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[SchoolRepository Restore Notifications Warning]: $e');
+    }
+  }
+
+  Future<List<NoticeModel>> getNotices({
+    String? schoolId,
+    UserRole? userRole,
+    bool includeDrafts = false,
+  }) async {
+    final client = _client;
+    String? effectiveSchoolId = schoolId;
+    if (effectiveSchoolId == null || effectiveSchoolId.isEmpty) {
+      try {
+        effectiveSchoolId = await _studentService.fetchActiveSchoolId();
+      } catch (_) {}
+    }
+
+    await _restoreNotices(effectiveSchoolId);
+
+    if (client != null && SupabaseConfig.isConfigured && effectiveSchoolId != null && effectiveSchoolId.isNotEmpty) {
+      try {
         final res = await client
             .from('notices')
             .select('*')
             .eq('school_id', effectiveSchoolId)
             .order('created_at', ascending: false);
 
-        final list = (res as List).map((row) => NoticeModel.fromJson(row)).toList();
-        return list;
+        if (res is List) {
+          final dbList = res.map((row) => NoticeModel.fromJson(row)).toList();
+          for (final item in dbList) {
+            final idx = _notices.indexWhere((n) => n.id == item.id);
+            if (idx != -1) {
+              _notices[idx] = item;
+            } else {
+              _notices.add(item);
+            }
+          }
+          await _persistNotices(effectiveSchoolId);
+        }
       } catch (e) {
         debugPrint('[SchoolRepository getNotices Warning]: $e');
-        return [];
       }
     }
+
     if (_notices.isEmpty) {
       final now = DateTime.now();
       _notices.addAll([
         NoticeModel(
           id: 'notice_1',
+          schoolId: effectiveSchoolId ?? '',
           title: 'Annual Sports Day & Athletics Meet 2026-27',
           content: 'We are pleased to announce our annual inter-house sports meet. All students from Class 1 to 12 are encouraged to register with their respective sports teachers.',
           category: 'Sports',
           date: now.subtract(const Duration(days: 1)),
           author: 'Principal Office',
+          targetAudience: 'All Staff',
+          status: 'Published',
           isPinned: true,
           isUnread: false,
         ),
         NoticeModel(
           id: 'notice_2',
+          schoolId: effectiveSchoolId ?? '',
           title: 'First Term Examination Schedule & Guidelines',
           content: 'The first term examination date-sheets have been released. Please review your subject syllabus and ensure timely arrival in school uniform.',
           category: 'Academic',
           date: now.subtract(const Duration(days: 3)),
           author: 'Examination Cell',
+          targetAudience: 'All Staff',
+          status: 'Published',
           isPinned: true,
           isUnread: false,
         ),
         NoticeModel(
           id: 'notice_3',
+          schoolId: effectiveSchoolId ?? '',
           title: 'Parent-Teacher Meeting (PTM) Scheduled',
           content: 'Quarterly Parent-Teacher Meeting will be held this Saturday between 9:00 AM and 1:00 PM. Parents are cordially invited to review progress.',
           category: 'General',
           date: now.subtract(const Duration(days: 5)),
           author: 'Administration',
+          targetAudience: 'Everyone',
+          status: 'Published',
           isPinned: false,
           isUnread: false,
         ),
       ]);
+      await _persistNotices(effectiveSchoolId);
     }
-    return _notices;
+
+    // Role-based Audience and Status filtering
+    return _notices.where((n) {
+      // School Isolation
+      if (effectiveSchoolId != null && effectiveSchoolId.isNotEmpty && n.schoolId.isNotEmpty && n.schoolId != effectiveSchoolId) {
+        return false;
+      }
+      // Drafts: only admins see drafts
+      if (n.status == 'Draft' && !includeDrafts && userRole != UserRole.schoolAdmin && userRole != UserRole.superAdmin) {
+        return false;
+      }
+      // Audience scoping: teachers only see All Staff, Teachers Only, or Everyone
+      if (userRole == UserRole.teacher) {
+        if (n.targetAudience == 'Admin Only') return false;
+      }
+      return true;
+    }).toList();
   }
 
   Future<void> addNotice(NoticeModel item, {String? schoolId, String? academicYearId}) async {
-    _notices.insert(0, item);
+    final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
+        ? schoolId
+        : await _studentService.fetchActiveSchoolId();
+
+    final enriched = item.copyWith(schoolId: effectiveSchoolId);
+    final existingIdx = _notices.indexWhere((n) => n.id == enriched.id);
+    if (existingIdx != -1) {
+      _notices[existingIdx] = enriched;
+    } else {
+      _notices.insert(0, enriched);
+    }
+    await _persistNotices(effectiveSchoolId);
+
+    // If published, trigger in-app notification for the target audience!
+    if (enriched.status == 'Published') {
+      final notif = NotificationModel(
+        id: 'notif_notice_${DateTime.now().millisecondsSinceEpoch}',
+        schoolId: effectiveSchoolId,
+        recipientRole: enriched.targetAudience,
+        title: 'New Notice: ${enriched.title}',
+        message: enriched.content.length > 90 ? '${enriched.content.substring(0, 90)}...' : enriched.content,
+        timestamp: DateTime.now(),
+        category: 'Notices',
+        isUnread: true,
+        relatedRecordId: enriched.id,
+        relatedRecordType: 'notice',
+      );
+      await addNotification(notif);
+
+      _accessService.logActivity(
+        'Published School Notice',
+        'Published "${enriched.title}" for ${enriched.targetAudience}',
+        'Notice Board',
+        adminName: enriched.author,
+      );
+    }
+
     final client = _client;
     if (client != null && SupabaseConfig.isConfigured) {
       try {
-        final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
-            ? schoolId
-            : await _studentService.fetchActiveSchoolId();
         final effectiveAyId = (academicYearId != null && academicYearId.isNotEmpty)
             ? academicYearId
             : await _studentService.fetchActiveAcademicYearId(effectiveSchoolId);
         final currentUserId = client.auth.currentUser?.id;
 
-        await client.from('notices').insert(item.toJson(
+        await client.from('notices').insert(enriched.toJson(
           schoolId: effectiveSchoolId,
           academicYearId: effectiveAyId,
           createdBy: currentUserId,
         ));
       } catch (e) {
         debugPrint('[SchoolRepository addNotice Supabase Sync Warning]: $e');
+      }
+    }
+  }
+
+  Future<void> updateNotice(NoticeModel item, {String? schoolId}) async {
+    final idx = _notices.indexWhere((n) => n.id == item.id);
+    if (idx != -1) {
+      _notices[idx] = item;
+      await _persistNotices(schoolId ?? item.schoolId);
+    }
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
+      try {
+        await client.from('notices').update({
+          'title': item.title,
+          'content': item.content,
+          'category': item.category,
+          'target_audience': item.targetAudience,
+          'status': item.status,
+          'is_pinned': item.isPinned,
+        }).eq('id', item.id);
+      } catch (e) {
+        debugPrint('[SchoolRepository updateNotice Warning]: $e');
+      }
+    }
+  }
+
+  Future<void> deleteNotice(String id, {String? schoolId}) async {
+    _notices.removeWhere((n) => n.id == id);
+    await _persistNotices(schoolId);
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
+      try {
+        await client.from('notices').delete().eq('id', id);
+      } catch (e) {
+        debugPrint('[SchoolRepository deleteNotice Warning]: $e');
       }
     }
   }
@@ -479,12 +669,44 @@ class SchoolRepository {
     return _transportService.fetchRoutes();
   }
 
-  Future<List<NotificationModel>> getNotifications() async {
-    if (MockData.notifications.isEmpty) {
+  Future<List<NotificationModel>> getNotifications({
+    String? schoolId,
+    String? userId,
+    UserRole? role,
+  }) async {
+    await _restoreNotifications(schoolId);
+
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
+      try {
+        final query = client.from('notifications').select('*');
+        if (schoolId != null && schoolId.isNotEmpty) {
+          query.eq('school_id', schoolId);
+        }
+        final res = await query.order('created_at', ascending: false).limit(50);
+        if (res is List) {
+          final dbList = res.map((row) => NotificationModel.fromJson(row)).toList();
+          for (final item in dbList) {
+            final idx = _notifications.indexWhere((n) => n.id == item.id);
+            if (idx != -1) {
+              _notifications[idx] = item;
+            } else {
+              _notifications.add(item);
+            }
+          }
+          await _persistNotifications(schoolId);
+        }
+      } catch (e) {
+        debugPrint('[SchoolRepository getNotifications Warning]: $e');
+      }
+    }
+
+    if (_notifications.isEmpty) {
       final now = DateTime.now();
-      MockData.notifications.addAll([
+      _notifications.addAll([
         NotificationModel(
           id: 'notif_1',
+          schoolId: schoolId ?? '',
           title: 'Quarterly Fee Due Reminder',
           message: 'First quarter tuition fee installment for 2026-2027 is due next week. Please clear pending dues.',
           timestamp: now.subtract(const Duration(hours: 2)),
@@ -493,30 +715,112 @@ class SchoolRepository {
         ),
         NotificationModel(
           id: 'notif_2',
+          schoolId: schoolId ?? '',
           title: 'Term Examination Schedule Published',
           message: 'The comprehensive datesheet for upcoming term-end assessments is now available on the portal.',
           timestamp: now.subtract(const Duration(days: 1)),
-          category: 'Results',
+          category: 'Academic',
           isUnread: true,
+          relatedRecordId: 'notice_2',
+          relatedRecordType: 'notice',
         ),
         NotificationModel(
           id: 'notif_3',
+          schoolId: schoolId ?? '',
           title: 'Annual Sports Day Registration Open',
           message: 'Sign up for athletic and indoor sports competitions with your assigned physical education teacher.',
           timestamp: now.subtract(const Duration(days: 2)),
-          category: 'School',
+          category: 'Notices',
           isUnread: false,
+          relatedRecordId: 'notice_1',
+          relatedRecordType: 'notice',
         ),
         NotificationModel(
           id: 'notif_4',
+          schoolId: schoolId ?? '',
           title: 'Parent-Teacher Meeting This Saturday',
           message: 'All parents and guardians are requested to attend the upcoming PTM session between 9 AM and 1 PM.',
           timestamp: now.subtract(const Duration(days: 3)),
-          category: 'School',
+          category: 'Meetings',
           isUnread: false,
+          relatedRecordId: 'notice_3',
+          relatedRecordType: 'meeting',
         ),
       ]);
+      await _persistNotifications(schoolId);
     }
-    return MockData.notifications;
+
+    return _notifications.where((n) {
+      if (schoolId != null && schoolId.isNotEmpty && n.schoolId.isNotEmpty && n.schoolId != schoolId) {
+        return false;
+      }
+      if (userId != null && n.recipientId != null && n.recipientId!.isNotEmpty && n.recipientId != userId) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  Future<void> addNotification(NotificationModel item) async {
+    final existingIdx = _notifications.indexWhere((n) => n.id == item.id);
+    if (existingIdx != -1) {
+      _notifications[existingIdx] = item;
+    } else {
+      _notifications.insert(0, item);
+    }
+    await _persistNotifications(item.schoolId);
+
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
+      try {
+        await client.from('notifications').insert(item.toJson());
+      } catch (e) {
+        debugPrint('[SchoolRepository addNotification Warning]: $e');
+      }
+    }
+  }
+
+  Future<void> markNotificationRead(String id, {String? schoolId}) async {
+    final idx = _notifications.indexWhere((n) => n.id == id);
+    if (idx != -1) {
+      _notifications[idx] = _notifications[idx].copyWith(isUnread: false);
+      await _persistNotifications(schoolId ?? _notifications[idx].schoolId);
+    }
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
+      try {
+        await client.from('notifications').update({'is_unread': false}).eq('id', id);
+      } catch (e) {
+        debugPrint('[SchoolRepository markNotificationRead Warning]: $e');
+      }
+    }
+  }
+
+  Future<void> markAllNotificationsRead({String? schoolId, String? userId}) async {
+    for (int i = 0; i < _notifications.length; i++) {
+      if ((schoolId == null || _notifications[i].schoolId.isEmpty || _notifications[i].schoolId == schoolId) &&
+          (userId == null || _notifications[i].recipientId == null || _notifications[i].recipientId == userId)) {
+        _notifications[i] = _notifications[i].copyWith(isUnread: false);
+      }
+    }
+    await _persistNotifications(schoolId);
+
+    final client = _client;
+    if (client != null && SupabaseConfig.isConfigured) {
+      try {
+        var query = client.from('notifications').update({'is_unread': false});
+        if (schoolId != null && schoolId.isNotEmpty) {
+          query = query.eq('school_id', schoolId);
+        }
+        await query;
+      } catch (e) {
+        debugPrint('[SchoolRepository markAllNotificationsRead Warning]: $e');
+      }
+    }
+  }
+
+  Future<int> getUnreadNotificationCount({String? schoolId, String? userId, UserRole? role}) async {
+    final list = await getNotifications(schoolId: schoolId, userId: userId, role: role);
+    return list.where((n) => n.isUnread).length;
   }
 }
