@@ -372,11 +372,25 @@ class AuthService {
               ? data['email'].toString()
               : (client.auth.currentUser?.id == authUserId ? (client.auth.currentUser?.email ?? '') : '');
 
+          final schoolId = data['school_id']?.toString() ?? '';
+          String schoolName = data['school_name']?.toString() ?? '';
+          if (schoolName.isEmpty && schoolId.isNotEmpty) {
+            try {
+              final schoolRow = await client.from('schools').select('name').eq('id', schoolId).maybeSingle();
+              if (schoolRow != null && schoolRow['name'] != null && schoolRow['name'].toString().isNotEmpty) {
+                schoolName = schoolRow['name'].toString();
+              }
+            } catch (_) {}
+          }
+          if (schoolName.isEmpty) {
+            schoolName = 'School';
+          }
+
           return UserProfileModel(
             id: data['id']?.toString() ?? authUserId,
             authUserId: data['auth_user_id']?.toString() ?? authUserId,
-            schoolId: data['school_id']?.toString() ?? '',
-            schoolName: data['school_name']?.toString() ?? 'School',
+            schoolId: schoolId,
+            schoolName: schoolName,
             name: data['full_name']?.toString() ?? data['name']?.toString() ?? 'Faculty Member',
             email: emailStr,
             role: _parseRole(data['role']?.toString()),
@@ -396,11 +410,23 @@ class AuthService {
           final metaSchoolId = meta['school_id']?.toString().trim();
           if (metaSchoolId != null && metaSchoolId.isNotEmpty) {
             final resolvedRole = _parseRole(meta['role']?.toString());
+            String schoolName = meta['school_name']?.toString() ?? '';
+            if (schoolName.isEmpty) {
+              try {
+                final schoolRow = await client.from('schools').select('name').eq('id', metaSchoolId).maybeSingle();
+                if (schoolRow != null && schoolRow['name'] != null && schoolRow['name'].toString().isNotEmpty) {
+                  schoolName = schoolRow['name'].toString();
+                }
+              } catch (_) {}
+            }
+            if (schoolName.isEmpty) {
+              schoolName = 'School';
+            }
             return UserProfileModel(
               id: user.id,
               authUserId: user.id,
               schoolId: metaSchoolId,
-              schoolName: meta['school_name']?.toString() ?? 'School',
+              schoolName: schoolName,
               name: meta['full_name']?.toString() ?? user.email?.split('@').first ?? (resolvedRole.isAdministrator ? 'School Admin' : 'Faculty Member'),
               email: user.email ?? '',
               role: resolvedRole,

@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/attendance_model.dart';
 import '../models/student_model.dart';
@@ -45,6 +47,49 @@ class AttendanceService {
       client: _client,
       requestedSchoolId: fallback,
     );
+  }
+
+  // --- ATTENDANCE CUTOFF TIME MANAGEMENT ---
+  Future<TimeOfDay> getCutoffTime(String schoolId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'attendance_cutoff_time_${schoolId.trim()}';
+      final val = prefs.getString(key);
+      if (val != null && val.contains(':')) {
+        final parts = val.split(':');
+        final hour = int.tryParse(parts[0]) ?? 9;
+        final minute = int.tryParse(parts[1]) ?? 30;
+        return TimeOfDay(hour: hour, minute: minute);
+      }
+    } catch (_) {}
+    return const TimeOfDay(hour: 9, minute: 30);
+  }
+
+  Future<void> setCutoffTime(String schoolId, TimeOfDay time) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'attendance_cutoff_time_${schoolId.trim()}';
+      final formatted = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+      await prefs.setString(key, formatted);
+    } catch (e) {
+      debugPrint('[AttendanceService setCutoffTime error]: $e');
+    }
+  }
+
+  String formatCutoffTime(TimeOfDay time) {
+    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+    final minute = time.minute.toString().padLeft(2, '0');
+    final hourStr = hour.toString().padLeft(2, '0');
+    return '$hourStr:$minute $period';
+  }
+
+  Future<bool> isPastCutoff(String schoolId, [DateTime? testTime]) async {
+    final cutoff = await getCutoffTime(schoolId);
+    final now = testTime ?? DateTime.now();
+    final cutoffMinutes = cutoff.hour * 60 + cutoff.minute;
+    final nowMinutes = now.hour * 60 + now.minute;
+    return nowMinutes > cutoffMinutes;
   }
 
   Future<String?> fetchActiveAcademicYearId(String schoolId) async {

@@ -8,7 +8,12 @@ import '../models/result_models.dart';
 
 class PdfService {
   // Generate Fee Receipt PDF Document Bytes
-  static Future<Uint8List> generateFeeReceiptPdf(FeeReceiptModel receipt) async {
+  static Future<Uint8List> generateFeeReceiptPdf(
+    FeeReceiptModel receipt, {
+    String? schoolName,
+    String? campusAddress,
+    String? phone,
+  }) async {
     final pdf = pw.Document();
 
     pdf.addPage(
@@ -28,7 +33,9 @@ class PdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          'ST. XAVIER MODERN ACADEMY',
+                          (schoolName != null && schoolName.isNotEmpty && schoolName != 'School')
+                              ? schoolName.toUpperCase()
+                              : 'INSTITUTION ACADEMY',
                           style: pw.TextStyle(
                             fontSize: 18,
                             fontWeight: pw.FontWeight.bold,
@@ -36,11 +43,13 @@ class PdfService {
                           ),
                         ),
                         pw.Text(
-                          'Ring Road Campus, Vasant Vihar, New Delhi - 110057',
+                          campusAddress ?? 'Official Institutional Campus',
                           style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
                         ),
                         pw.Text(
-                          'Affiliation No: 2130849 • Phone: +91 11 2614 8920',
+                          phone != null && phone.isNotEmpty
+                              ? 'Official Contact • Phone: $phone'
+                              : 'Official Digital Records Division',
                           style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
                         ),
                       ],
@@ -196,7 +205,7 @@ class PdfService {
                         pw.Container(width: 140, height: 1, color: PdfColors.grey800),
                         pw.SizedBox(height: 4),
                         pw.Text('Authorized Accounts Officer', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                        pw.Text('St. Xavier Modern Academy'),
+                        pw.Text(schoolName ?? 'Institution Accounts Division'),
                       ],
                     ),
                   ],
@@ -212,7 +221,10 @@ class PdfService {
   }
 
   // Generate Salary Slip PDF Document Bytes
-  static Future<Uint8List> generateSalarySlipPdf(SalarySlipModel slip) async {
+  static Future<Uint8List> generateSalarySlipPdf(
+    SalarySlipModel slip, {
+    String? schoolName,
+  }) async {
     final pdf = pw.Document();
 
     pdf.addPage(
@@ -232,7 +244,9 @@ class PdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          'ST. XAVIER MODERN ACADEMY',
+                          (schoolName != null && schoolName.isNotEmpty && schoolName != 'School')
+                              ? schoolName.toUpperCase()
+                              : 'INSTITUTION ACADEMY',
                           style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
                         ),
                         pw.Text('Staff Payroll & Accounts Division', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
@@ -354,7 +368,10 @@ class PdfService {
   }
 
   // Generate Official Student Report Card PDF Document Bytes
-  static Future<Uint8List> generateReportCardPdf(StudentResultModel result) async {
+  static Future<Uint8List> generateReportCardPdf(
+    StudentResultModel result, {
+    String? schoolName,
+  }) async {
     final pdf = pw.Document();
 
     pdf.addPage(
@@ -374,7 +391,9 @@ class PdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          'ST. XAVIER MODERN ACADEMY',
+                          (schoolName != null && schoolName.isNotEmpty && schoolName != 'School')
+                              ? schoolName.toUpperCase()
+                              : 'INSTITUTION ACADEMY',
                           style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
                         ),
                         pw.Text('OFFICIAL ACADEMIC REPORT CARD', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo700)),

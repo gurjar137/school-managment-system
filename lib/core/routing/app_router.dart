@@ -48,6 +48,7 @@ import '../../features/library/library_screen.dart';
 import '../../features/transport/transport_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/profile/profile_screen.dart';
+import '../../features/subjects/subject_catalog_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/results/teacher_results_screen.dart';
 import '../../features/admin/admin_create_exam_screen.dart';
@@ -336,6 +337,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/academic-years',
         builder: (context, state) => const AcademicYearsScreen(),
+      ),
+      GoRoute(
+        path: '/subjects',
+        builder: (context, state) => const SubjectCatalogScreen(),
       ),
       GoRoute(
         path: '/parents',

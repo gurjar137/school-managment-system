@@ -992,6 +992,7 @@ class TeacherService {
             schoolId: s['school_id']?.toString() ?? '',
             name: s['name']?.toString() ?? '',
             code: s['code']?.toString(),
+            type: s['type']?.toString() ?? 'THEORY',
           )).toList();
         }
       } catch (e) {
@@ -1005,18 +1006,22 @@ class TeacherService {
     required String schoolId,
     required String name,
     String? code,
+    String? type,
   }) async {
+    final effectiveType = (type != null && type.isNotEmpty) ? type.trim().toUpperCase() : 'THEORY';
     if (_client != null && SupabaseConfig.isConfigured) {
       final res = await _client!.from('subjects').insert({
         'school_id': schoolId,
         'name': name.trim(),
         'code': code?.trim().toUpperCase(),
+        'type': effectiveType,
       }).select().single();
       return SubjectModel(
         id: res['id']?.toString() ?? '',
         schoolId: res['school_id']?.toString() ?? '',
         name: res['name']?.toString() ?? '',
         code: res['code']?.toString(),
+        type: res['type']?.toString() ?? effectiveType,
       );
     }
 
@@ -1030,9 +1035,66 @@ class TeacherService {
       schoolId: schoolId,
       name: name.trim(),
       code: code?.trim().toUpperCase(),
+      type: effectiveType,
     );
     _mockSubjects.add(newSub);
     return newSub;
+  }
+
+  Future<SubjectModel> updateSubject({
+    required String id,
+    required String schoolId,
+    required String name,
+    String? code,
+    String? type,
+  }) async {
+    final effectiveType = (type != null && type.isNotEmpty) ? type.trim().toUpperCase() : 'THEORY';
+    if (_client != null && SupabaseConfig.isConfigured) {
+      final res = await _client!.from('subjects').update({
+        'name': name.trim(),
+        'code': code?.trim().toUpperCase(),
+        'type': effectiveType,
+      }).eq('id', id).eq('school_id', schoolId).select().single();
+      return SubjectModel(
+        id: res['id']?.toString() ?? id,
+        schoolId: res['school_id']?.toString() ?? schoolId,
+        name: res['name']?.toString() ?? name,
+        code: res['code']?.toString() ?? code,
+        type: res['type']?.toString() ?? effectiveType,
+      );
+    }
+
+    final idx = _mockSubjects.indexWhere((s) => s.id == id);
+    if (idx != -1) {
+      _mockSubjects[idx] = _mockSubjects[idx].copyWith(
+        name: name.trim(),
+        code: code?.trim().toUpperCase(),
+        type: effectiveType,
+      );
+      return _mockSubjects[idx];
+    }
+    throw Exception('Subject not found.');
+  }
+
+  Future<void> deleteSubject({
+    required String id,
+    required String schoolId,
+  }) async {
+    if (_client != null && SupabaseConfig.isConfigured) {
+      try {
+        final examCheck = await _client!.from('exam_subjects').select('id').eq('subject_id', id).limit(1);
+        if (examCheck.isNotEmpty) {
+          throw Exception('Cannot delete subject: It is referenced by examinations.');
+        }
+      } catch (e) {
+        if (e is Exception && e.toString().contains('Cannot delete')) rethrow;
+      }
+
+      await _client!.from('subjects').delete().eq('id', id).eq('school_id', schoolId);
+      return;
+    }
+
+    _mockSubjects.removeWhere((s) => s.id == id);
   }
 
   // --- ASSIGNMENTS ---

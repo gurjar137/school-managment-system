@@ -113,7 +113,12 @@ class AdminDashboardMetrics {
 final currentSchoolProvider = FutureProvider<SchoolModel>((ref) async {
   final activeProfile = ref.watch(authProvider.notifier).activeProfile;
   final schoolService = ref.watch(schoolServiceProvider);
-  final schoolId = activeProfile?.schoolId;
+  String? schoolId = activeProfile?.schoolId;
+  if (schoolId == null || schoolId.isEmpty) {
+    try {
+      schoolId = await TenantResolver.resolveActiveSchoolId();
+    } catch (_) {}
+  }
   if (schoolId != null && schoolId.isNotEmpty) {
     return await schoolService.fetchSchoolProfile(schoolId);
   }
@@ -255,19 +260,115 @@ final schoolManagementServiceProvider = Provider<SchoolManagementService>((ref) 
 
 // Theme Mode State
 class ThemeNotifier extends StateNotifier<ThemeMode> {
-  ThemeNotifier() : super(ThemeMode.light);
+  static const String _prefKey = 'app_theme_mode';
 
-  void toggleTheme() {
-    state = state == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+  ThemeNotifier() : super(ThemeMode.light) {
+    _loadTheme();
   }
 
-  void setTheme(ThemeMode mode) {
+  Future<void> _loadTheme() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_prefKey);
+      if (saved == 'dark') {
+        state = ThemeMode.dark;
+      } else if (saved == 'light') {
+        state = ThemeMode.light;
+      }
+    } catch (_) {}
+  }
+
+  Future<void> toggleTheme() async {
+    final newMode = state == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+    state = newMode;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefKey, newMode == ThemeMode.dark ? 'dark' : 'light');
+    } catch (_) {}
+  }
+
+  Future<void> setTheme(ThemeMode mode) async {
     state = mode;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefKey, mode == ThemeMode.dark ? 'dark' : 'light');
+    } catch (_) {}
   }
 }
 
 final themeProvider = StateNotifierProvider<ThemeNotifier, ThemeMode>((ref) {
   return ThemeNotifier();
+});
+
+// Telemetry & Settings Providers
+class OfflineSyncNotifier extends StateNotifier<bool> {
+  static const String _prefKey = 'offline_queue_autosync';
+
+  OfflineSyncNotifier() : super(true) {
+    _loadPreference();
+  }
+
+  Future<void> _loadPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      state = prefs.getBool(_prefKey) ?? true;
+    } catch (_) {}
+  }
+
+  Future<void> toggle() async {
+    state = !state;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefKey, state);
+    } catch (_) {}
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    state = enabled;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefKey, enabled);
+    } catch (_) {}
+  }
+}
+
+final offlineSyncProvider = StateNotifierProvider<OfflineSyncNotifier, bool>((ref) {
+  return OfflineSyncNotifier();
+});
+
+class PushNotificationNotifier extends StateNotifier<bool> {
+  static const String _prefKey = 'push_notifications_enabled';
+
+  PushNotificationNotifier() : super(true) {
+    _loadPreference();
+  }
+
+  Future<void> _loadPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      state = prefs.getBool(_prefKey) ?? true;
+    } catch (_) {}
+  }
+
+  Future<void> toggle() async {
+    state = !state;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefKey, state);
+    } catch (_) {}
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    state = enabled;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefKey, enabled);
+    } catch (_) {}
+  }
+}
+
+final pushNotificationProvider = StateNotifierProvider<PushNotificationNotifier, bool>((ref) {
+  return PushNotificationNotifier();
 });
 
 final authServiceProvider = Provider<AuthService>((ref) {

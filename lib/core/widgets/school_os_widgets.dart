@@ -469,7 +469,9 @@ class SchoolOsTopHeader extends ConsumerWidget {
 
     final schoolDisplayName = (school != null && school.name.isNotEmpty && school.name != 'School')
         ? school.name
-        : (user?.schoolName ?? 'Kamal Public School');
+        : (user?.schoolName != null && user!.schoolName.isNotEmpty && user.schoolName != 'School'
+            ? user.schoolName
+            : 'School Command OS');
 
     return Container(
       height: 64,

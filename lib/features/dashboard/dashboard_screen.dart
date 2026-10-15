@@ -37,7 +37,7 @@ class DashboardScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${user?.schoolName ?? "St. Xavier Academy"} • $formattedDate',
+                          '${(user?.schoolName != null && user!.schoolName.isNotEmpty && user.schoolName != "School") ? user.schoolName : "School Command OS"} • $formattedDate',
                           style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
                         ),
                       ],

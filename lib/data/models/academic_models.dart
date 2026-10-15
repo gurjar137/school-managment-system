@@ -189,6 +189,7 @@ class SubjectModel {
   final String schoolId;
   final String name;
   final String? code;
+  final String? type; // "THEORY", "PRACTICAL", "ELECTIVE"
   final AccountStatus status;
 
   const SubjectModel({
@@ -196,8 +197,25 @@ class SubjectModel {
     required this.schoolId,
     required this.name,
     this.code,
+    this.type = 'THEORY',
     this.status = AccountStatus.active,
   });
+
+  SubjectModel copyWith({
+    String? name,
+    String? code,
+    String? type,
+    AccountStatus? status,
+  }) {
+    return SubjectModel(
+      id: id,
+      schoolId: schoolId,
+      name: name ?? this.name,
+      code: code ?? this.code,
+      type: type ?? this.type,
+      status: status ?? this.status,
+    );
+  }
 }
 
 class TeacherAssignmentModel {

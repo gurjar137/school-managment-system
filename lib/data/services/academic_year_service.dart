@@ -306,6 +306,74 @@ class AcademicYearService {
     throw const AcademicYearValidationException('Academic year not found in cache.');
   }
 
+  /// Set an academic year as the authoritative active/current session for [schoolId].
+  Future<AcademicYearModel> setCurrentAcademicYear({
+    required String id,
+    required String schoolId,
+  }) async {
+    final cleanSchoolId = schoolId.trim();
+    final cleanId = id.trim();
+
+    if (_client != null && SupabaseConfig.isConfigured) {
+      try {
+        // Deactivate is_current across the school first
+        await _client!
+            .from('academic_years')
+            .update({'is_current': false})
+            .eq('school_id', cleanSchoolId);
+
+        // Activate the chosen academic year
+        final res = await _client!
+            .from('academic_years')
+            .update({'is_current': true, 'status': 'ACTIVE'})
+            .eq('id', cleanId)
+            .eq('school_id', cleanSchoolId)
+            .select()
+            .single();
+
+        final updated = AcademicYearModel.fromJson(Map<String, dynamic>.from(res));
+        for (int i = 0; i < _cache.length; i++) {
+          if (_cache[i].schoolId == cleanSchoolId) {
+            _cache[i] = _cache[i].copyWith(
+              isCurrent: _cache[i].id == cleanId,
+              status: _cache[i].id == cleanId ? AccountStatus.active : _cache[i].status,
+            );
+          }
+        }
+        return updated;
+      } catch (e) {
+        debugPrint('[AcademicYearService setCurrentAcademicYear DB note]: $e');
+      }
+    }
+
+    // Local / fallback update
+    for (int i = 0; i < _cache.length; i++) {
+      if (_cache[i].schoolId == cleanSchoolId) {
+        _cache[i] = _cache[i].copyWith(
+          isCurrent: _cache[i].id == cleanId,
+          status: _cache[i].id == cleanId ? AccountStatus.active : _cache[i].status,
+        );
+      }
+    }
+    return _cache.firstWhere(
+      (y) => y.id == cleanId,
+      orElse: () => AcademicYearModel(
+        id: cleanId,
+        schoolId: cleanSchoolId,
+        name: '2026-2027',
+        isCurrent: true,
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Get the current/active academic year for [schoolId].
+  Future<AcademicYearModel?> getActiveAcademicYear(String schoolId) async {
+    final list = await fetchAcademicYears(schoolId);
+    if (list.isEmpty) return null;
+    return AcademicYearOption.resolveCurrent(list);
+  }
+
   /// Inspect dependent database records referencing this academic year.
   Future<List<String>> checkDependentRecords({
     required String id,

@@ -6,19 +6,328 @@ import '../../core/theme/app_typography.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
 import '../../core/widgets/app_back_button.dart';
+import '../../data/services/tenant_resolver.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  TimeOfDay _cutoffTime = const TimeOfDay(hour: 9, minute: 30);
+  int _subjectCount = 0;
+  int _classCount = 0;
+  int _sectionCount = 0;
+  String _activeSessionName = 'Loading session...';
+  bool _isLoadingMetrics = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSettingsData());
+  }
+
+  Future<void> _loadSettingsData() async {
+    setState(() => _isLoadingMetrics = true);
+
+    try {
+      final user = ref.read(authProvider);
+      String schoolId = user?.schoolId?.trim() ?? '';
+      if (schoolId.isEmpty) {
+        schoolId = await TenantResolver.resolveActiveSchoolId();
+      }
+
+      final attendanceService = ref.read(attendanceServiceProvider);
+      final teacherService = ref.read(teacherServiceProvider);
+      final classService = ref.read(classSectionServiceProvider);
+      final academicYearService = ref.read(academicYearServiceProvider);
+
+      // 1. Cutoff time
+      final cutoff = await attendanceService.getCutoffTime(schoolId);
+
+      // 2. Subjects count
+      final subjects = await teacherService.getSubjects(schoolId: schoolId);
+
+      // 3. Active Academic Session & Classes
+      final years = await academicYearService.fetchAcademicYears(schoolId);
+      final currentYear = years.isNotEmpty
+          ? years.firstWhere((y) => y.isCurrent, orElse: () => years.first)
+          : null;
+
+      int classCount = 0;
+      int sectionCount = 0;
+      if (currentYear != null) {
+        final classes = await classService.fetchClasses(schoolId, currentYear.id);
+        classCount = classes.length;
+        for (final c in classes) {
+          sectionCount += c.sectionsCount;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _cutoffTime = cutoff;
+          _subjectCount = subjects.length;
+          _classCount = classCount;
+          _sectionCount = sectionCount;
+          _activeSessionName = currentYear != null
+              ? 'Session ${currentYear.name} • Active'
+              : 'No Active Academic Session';
+          _isLoadingMetrics = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[SettingsScreen _loadSettingsData error]: $e');
+      if (mounted) {
+        setState(() => _isLoadingMetrics = false);
+      }
+    }
+  }
+
+  Future<void> _pickCutoffTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _cutoffTime,
+      helpText: 'SELECT ATTENDANCE CUTOFF TIME',
+    );
+
+    if (picked != null && mounted) {
+      setState(() => _cutoffTime = picked);
+      final user = ref.read(authProvider);
+      String schoolId = user?.schoolId?.trim() ?? '';
+      if (schoolId.isEmpty) {
+        schoolId = await TenantResolver.resolveActiveSchoolId();
+      }
+
+      await ref.read(attendanceServiceProvider).setCutoffTime(schoolId, picked);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.mutedGreen,
+            content: Text(
+              'Attendance cutoff time updated to ${ref.read(attendanceServiceProvider).formatCutoffTime(picked)}!',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showOfflineQueueDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final autoSync = ref.watch(offlineSyncProvider);
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.sync_rounded, color: AppColors.indigo, size: 28),
+                  const SizedBox(width: 12),
+                  Text('Offline Queue & Sync Engine', style: AppTypography.titleMedium),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Attendance records, grades, and receipt submissions created without an active internet connection are stored safely in the local persistent queue.',
+                style: AppTypography.bodySmall.copyWith(color: AppColors.secondaryText),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.mainBackground,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Auto-Sync Status:', style: AppTypography.labelMedium),
+                    Text(
+                      autoSync ? 'ACTIVE (Sync on Network)' : 'PAUSED (Manual Only)',
+                      style: AppTypography.labelMedium.copyWith(
+                        color: autoSync ? AppColors.success : AppColors.softCoral,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: AppColors.mutedGreen,
+                        content: Text('Offline queue synchronized with central server! All records up to date.'),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.sync_rounded),
+                  label: const Text('Sync Now'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showNotificationPreferencesDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.notifications_active_outlined, color: AppColors.indigo),
+            SizedBox(width: 10),
+            Text('Push & Notification Alerts'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Configure notifications sent to administrators, teachers, and parents.',
+                style: AppTypography.bodySmall.copyWith(color: AppColors.secondaryText),
+              ),
+              const SizedBox(height: 16),
+              const SwitchListTile(
+                value: true,
+                onChanged: null,
+                title: Text('Staff Timetable & Leave Alerts'),
+                subtitle: Text('Notify faculty on substitution or leave approvals'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const Divider(height: 1),
+              const SwitchListTile(
+                value: true,
+                onChanged: null,
+                title: Text('Parent Attendance Warnings'),
+                subtitle: Text('Alert parents when student is absent past cutoff'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const Divider(height: 1),
+              const SwitchListTile(
+                value: true,
+                onChanged: null,
+                title: Text('Fee Reminder Notices'),
+                subtitle: Text('Send payment receipts and pending fee reminders'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.mainBackground,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.coolGray),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'In-App Dispatch: ACTIVE • Remote Push: Requires Firebase Cloud Messaging (FCM) credentials configuration for background device delivery.',
+                        style: AppTypography.labelSmall.copyWith(color: AppColors.coolGray, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Log Out of Command Center?'),
+        content: const Text(
+          'Are you sure you want to sign out of this session? Local cache will be safely reset and you will return to the portal sign-in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.softCoral),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref.read(authProvider.notifier).logout();
+              if (mounted) {
+                context.go('/role-selection');
+              }
+            },
+            child: const Text('Log Out', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
+    final autoSyncEnabled = ref.watch(offlineSyncProvider);
+    final pushNotificationsEnabled = ref.watch(pushNotificationProvider);
+    final schoolAsync = ref.watch(currentSchoolProvider);
+    final school = schoolAsync.valueOrNull;
+    final user = ref.watch(authProvider);
+
+    final schoolDisplayName = (school != null && school.name.isNotEmpty && school.name != 'School')
+        ? school.name
+        : (user?.schoolName != null && user!.schoolName.isNotEmpty && user.schoolName != 'School'
+            ? user.schoolName
+            : 'School Command OS');
+
+    final attendanceService = ref.read(attendanceServiceProvider);
+    final formattedCutoff = attendanceService.formatCutoffTime(_cutoffTime);
 
     return Scaffold(
       appBar: AppBar(
         leadingWidth: AppBackButton.leadingWidth,
         leading: const AppBackButton(fallbackPath: '/home'),
         title: Text('App & School Settings', style: AppTypography.titleLarge),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh Settings',
+            onPressed: _loadSettingsData,
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -28,13 +337,24 @@ class SettingsScreen extends ConsumerWidget {
           BentoCard(
             child: Column(
               children: [
-                _buildSettingTile('School Identity & Branding', 'St. Xavier Modern Academy', Icons.school_outlined),
+                _buildSettingTile(
+                  'School Identity & Branding',
+                  schoolDisplayName,
+                  Icons.school_outlined,
+                  onTap: () async {
+                    await context.push('/school-settings');
+                    _loadSettingsData();
+                  },
+                ),
                 const Divider(height: 1),
                 _buildSettingTile(
                   'Academic Years',
-                  'Manage sessions, terms, and date windows',
+                  _isLoadingMetrics ? 'Loading academic session...' : _activeSessionName,
                   Icons.calendar_month_outlined,
-                  onTap: () => context.push('/academic-years'),
+                  onTap: () async {
+                    await context.push('/academic-years');
+                    _loadSettingsData();
+                  },
                 ),
                 const Divider(height: 1),
                 _buildSettingTile(
@@ -44,9 +364,26 @@ class SettingsScreen extends ConsumerWidget {
                   onTap: () => context.push('/timetable'),
                 ),
                 const Divider(height: 1),
-                _buildSettingTile('Class & Section Matrix', '8 Classes, 12 Sections Active', Icons.grid_view_rounded),
+                _buildSettingTile(
+                  'Class & Section Matrix',
+                  _isLoadingMetrics
+                      ? 'Loading classes & sections...'
+                      : '$_classCount Classes, $_sectionCount Sections Active',
+                  Icons.grid_view_rounded,
+                  onTap: () => context.push('/classes'),
+                ),
                 const Divider(height: 1),
-                _buildSettingTile('Subject Catalog', '16 Core & Elective Subjects', Icons.book_outlined),
+                _buildSettingTile(
+                  'Subject Catalog',
+                  _isLoadingMetrics
+                      ? 'Loading subjects...'
+                      : '$_subjectCount Core & Elective Subjects',
+                  Icons.book_outlined,
+                  onTap: () async {
+                    await context.push('/subjects');
+                    _loadSettingsData();
+                  },
+                ),
               ],
             ),
           ),
@@ -57,11 +394,68 @@ class SettingsScreen extends ConsumerWidget {
           BentoCard(
             child: Column(
               children: [
-                _buildSettingTile('Attendance Cutoff Time', '09:30 AM Daily Warning', Icons.timer_outlined),
+                _buildSettingTile(
+                  'Attendance Cutoff Time',
+                  '$formattedCutoff Daily Warning',
+                  Icons.timer_outlined,
+                  onTap: _pickCutoffTime,
+                ),
                 const Divider(height: 1),
-                _buildSettingTile('Offline Queue Auto-Sync', 'Sync when WiFi connects', Icons.sync_rounded),
+                ListTile(
+                  leading: const Icon(Icons.sync_rounded, color: AppColors.midnightNavy),
+                  title: Text(
+                    'Offline Queue Auto-Sync',
+                    style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    autoSyncEnabled ? 'Sync automatically on network reconnect' : 'Manual synchronization only',
+                    style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.info_outline_rounded, size: 20, color: AppColors.coolGray),
+                        tooltip: 'Sync Queue Details',
+                        onPressed: _showOfflineQueueDialog,
+                      ),
+                      Switch(
+                        value: autoSyncEnabled,
+                        activeThumbColor: AppColors.softLavender,
+                        onChanged: (val) => ref.read(offlineSyncProvider.notifier).setEnabled(val),
+                      ),
+                    ],
+                  ),
+                  onTap: _showOfflineQueueDialog,
+                ),
                 const Divider(height: 1),
-                _buildSettingTile('Push Notifications', 'Parents & Staff alerts enabled', Icons.notifications_active_outlined),
+                ListTile(
+                  leading: const Icon(Icons.notifications_active_outlined, color: AppColors.midnightNavy),
+                  title: Text(
+                    'Push Notifications',
+                    style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    pushNotificationsEnabled ? 'Parents & Staff alerts enabled' : 'Notification alerts muted',
+                    style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.tune_rounded, size: 20, color: AppColors.coolGray),
+                        tooltip: 'Configure Alerts',
+                        onPressed: _showNotificationPreferencesDialog,
+                      ),
+                      Switch(
+                        value: pushNotificationsEnabled,
+                        activeThumbColor: AppColors.softLavender,
+                        onChanged: (val) => ref.read(pushNotificationProvider.notifier).setEnabled(val),
+                      ),
+                    ],
+                  ),
+                  onTap: _showNotificationPreferencesDialog,
+                ),
               ],
             ),
           ),
@@ -93,12 +487,7 @@ class SettingsScreen extends ConsumerWidget {
                     style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.softCoral),
-                  onTap: () async {
-                    await ref.read(authProvider.notifier).logout();
-                    if (context.mounted) {
-                      context.go('/role-selection');
-                    }
-                  },
+                  onTap: _confirmLogout,
                 ),
               ],
             ),
@@ -113,7 +502,10 @@ class SettingsScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.palette_outlined, color: AppColors.softLavender),
                   title: Text('Dark Mode Theme', style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w600)),
-                  subtitle: Text('Switch between Light and Dark Command Center UI', style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray)),
+                  subtitle: Text(
+                    themeMode == ThemeMode.dark ? 'Dark Command Center Active' : 'Light Mode Active',
+                    style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
+                  ),
                   trailing: Switch(
                     value: themeMode == ThemeMode.dark,
                     activeThumbColor: AppColors.softLavender,

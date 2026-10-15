@@ -14,18 +14,6 @@ class SchoolService {
     return null;
   }
 
-  static final SchoolModel _defaultMockSchool = SchoolModel(
-    id: 'mock_school_1',
-    schoolCode: 'SCH001',
-    name: 'St. Xavier International School',
-    logoUrl: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=150',
-    appName: 'School Command OS',
-    primaryColor: '#1E293B',
-    secondaryColor: '#6366F1',
-    status: AccountStatus.active,
-    createdAt: DateTime(2026, 1, 1),
-  );
-
   // --- FETCH SCHOOL PROFILE BY ID OR CODE ---
   Future<SchoolModel> fetchSchoolProfile(String schoolIdOrCode) async {
     await Future.delayed(const Duration(milliseconds: 150));
@@ -58,7 +46,12 @@ class SchoolService {
       }
     }
 
-    return _defaultMockSchool;
+    return SchoolModel(
+      id: schoolIdOrCode,
+      schoolCode: '—',
+      name: 'School',
+      createdAt: DateTime.now(),
+    );
   }
 
   // --- FETCH SCHOOL BY HUMAN-FRIENDLY CODE (SCH001) ---
@@ -86,10 +79,54 @@ class SchoolService {
       }
     }
 
-    if (schoolCode.toUpperCase().trim() == 'SCH001') {
-      return _defaultMockSchool;
-    }
     return null;
+  }
+
+  // --- UPDATE SCHOOL CONFIGURATION / PROFILE ---
+  Future<SchoolModel> updateSchoolProfile({
+    required String schoolId,
+    required String name,
+    String? address,
+    String? phone,
+    String? email,
+    String? logoUrl,
+  }) async {
+    final cleanId = schoolId.trim();
+    if (cleanId.isEmpty) {
+      throw Exception('School ID is required to update school configuration.');
+    }
+
+    if (_client != null && SupabaseConfig.isConfigured) {
+      final updateData = <String, dynamic>{
+        'name': name.trim(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      if (address != null) updateData['address'] = address.trim();
+      if (phone != null) updateData['phone'] = phone.trim();
+      if (email != null) updateData['email'] = email.trim();
+      if (logoUrl != null) updateData['logo_url'] = logoUrl.trim();
+
+      final res = await _client!
+          .from('schools')
+          .update(updateData)
+          .eq('id', cleanId)
+          .select()
+          .single();
+
+      return _mapDataToSchoolModel(Map<String, dynamic>.from(res));
+    }
+
+    // Local / offline fallback
+    return SchoolModel(
+      id: cleanId,
+      schoolCode: '—',
+      name: name.trim(),
+      address: address?.trim(),
+      phone: phone?.trim(),
+      email: email?.trim(),
+      logoUrl: logoUrl,
+      createdAt: DateTime.now(),
+    );
   }
 
   SchoolModel _mapDataToSchoolModel(Map<String, dynamic> data) {
@@ -97,6 +134,9 @@ class SchoolService {
       id: data['id']?.toString() ?? '',
       schoolCode: data['code']?.toString() ?? data['school_code']?.toString() ?? '—',
       name: data['name']?.toString() ?? 'School',
+      address: data['address']?.toString(),
+      phone: data['phone']?.toString(),
+      email: data['email']?.toString(),
       logoUrl: data['logo_url']?.toString(),
       appName: data['app_name']?.toString(),
       primaryColor: data['primary_color']?.toString(),

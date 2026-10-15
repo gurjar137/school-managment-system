@@ -84,14 +84,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'St. Xavier',
+                        'School OS',
                         style: AppTypography.titleMedium.copyWith(
                           fontWeight: FontWeight.w800,
                           fontSize: 18,
                         ),
                       ),
                       Text(
-                        'Modern Command Center',
+                        'Institution Command Center',
                         style: AppTypography.bodySmall.copyWith(
                           color: AppColors.coolGray,
                         ),
