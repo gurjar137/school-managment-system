@@ -174,12 +174,19 @@ class _SchoolSettingsScreenState extends ConsumerState<SchoolSettingsScreen> {
         email: _emailCtrl.text.trim(),
       );
 
-      // 2. Persist Active Academic Year if changed
-      if (_selectedYearId != null && _selectedYearId != _initialYearId) {
-        await academicYearService.setCurrentAcademicYear(
-          id: _selectedYearId!,
-          schoolId: schoolId,
-        );
+      // 2. Validate & Persist Active Academic Year if changed
+      if (_selectedYearId != null) {
+        final isValidSession = _availableYears.any((y) => y.id == _selectedYearId);
+        if (!isValidSession) {
+          throw Exception('The selected academic session does not belong to this verified school.');
+        }
+
+        if (_selectedYearId != _initialYearId) {
+          await academicYearService.setCurrentAcademicYear(
+            id: _selectedYearId!,
+            schoolId: schoolId,
+          );
+        }
       }
 
       // 3. Keep local in-memory SchoolManagementService in sync
@@ -216,12 +223,8 @@ class _SchoolSettingsScreenState extends ConsumerState<SchoolSettingsScreen> {
       ref.invalidate(appAccessStateProvider);
       await ref.read(authProvider.notifier).refreshProfile();
 
-      // Update tracking state
-      _initialName = _nameCtrl.text.trim();
-      _initialAddress = _addressCtrl.text.trim();
-      _initialPhone = _phoneCtrl.text.trim();
-      _initialEmail = _emailCtrl.text.trim();
-      _initialYearId = _selectedYearId;
+      // 5. Reload persisted values from Supabase
+      await _loadSettings();
 
       if (mounted) {
         setState(() => _isSaving = false);

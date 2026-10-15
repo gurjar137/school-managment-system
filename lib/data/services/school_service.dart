@@ -14,6 +14,8 @@ class SchoolService {
     return null;
   }
 
+  static final Map<String, SchoolModel> _localCache = {};
+
   // --- FETCH SCHOOL PROFILE BY ID OR CODE ---
   Future<SchoolModel> fetchSchoolProfile(String schoolIdOrCode) async {
     await Future.delayed(const Duration(milliseconds: 150));
@@ -29,7 +31,9 @@ class SchoolService {
                await query.eq('school_code', schoolIdOrCode).maybeSingle());
 
         if (data != null) {
-          return _mapDataToSchoolModel(data);
+          final model = _mapDataToSchoolModel(data);
+          _localCache[schoolIdOrCode] = model;
+          return model;
         }
 
         if (!schoolIdOrCode.contains('-')) {
@@ -37,13 +41,19 @@ class SchoolService {
             final rpcData = await _client!.rpc('lookup_school_by_code', params: {'p_code': schoolIdOrCode.toUpperCase().trim()});
             if (rpcData is List && rpcData.isNotEmpty) {
               final row = rpcData.first;
-              return _mapDataToSchoolModel(Map<String, dynamic>.from(row as Map));
+              final model = _mapDataToSchoolModel(Map<String, dynamic>.from(row as Map));
+              _localCache[schoolIdOrCode] = model;
+              return model;
             }
           } catch (_) {}
         }
       } catch (e) {
         debugPrint('[SchoolService Supabase Warning]: $e');
       }
+    }
+
+    if (_localCache.containsKey(schoolIdOrCode)) {
+      return _localCache[schoolIdOrCode]!;
     }
 
     return SchoolModel(
@@ -95,10 +105,14 @@ class SchoolService {
     if (cleanId.isEmpty) {
       throw Exception('School ID is required to update school configuration.');
     }
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      throw Exception('School name cannot be empty.');
+    }
 
     if (_client != null && SupabaseConfig.isConfigured) {
       final updateData = <String, dynamic>{
-        'name': name.trim(),
+        'name': cleanName,
         'updated_at': DateTime.now().toIso8601String(),
       };
       if (address != null) updateData['address'] = address.trim();
@@ -106,27 +120,92 @@ class SchoolService {
       if (email != null) updateData['email'] = email.trim();
       if (logoUrl != null) updateData['logo_url'] = logoUrl.trim();
 
-      final res = await _client!
-          .from('schools')
-          .update(updateData)
-          .eq('id', cleanId)
-          .select()
-          .single();
+      // 1. Check whether a matching school record already exists
+      final isUuid = cleanId.contains('-');
+      Map<String, dynamic>? existingRow;
+      try {
+        existingRow = isUuid
+            ? await _client!.from('schools').select().eq('id', cleanId).maybeSingle()
+            : (await _client!.from('schools').select().eq('code', cleanId).maybeSingle() ??
+               await _client!.from('schools').select().eq('school_code', cleanId).maybeSingle());
+      } catch (e) {
+        debugPrint('[SchoolService check existing error]: $e');
+      }
 
-      return _mapDataToSchoolModel(Map<String, dynamic>.from(res));
+      if (existingRow != null) {
+        // Record exists -> UPDATE
+        final targetId = existingRow['id']?.toString() ?? cleanId;
+        try {
+          final res = await _client!
+              .from('schools')
+              .update(updateData)
+              .eq('id', targetId)
+              .select()
+              .maybeSingle();
+
+          if (res != null) {
+            final model = _mapDataToSchoolModel(Map<String, dynamic>.from(res));
+            _localCache[cleanId] = model;
+            return model;
+          }
+        } on PostgrestException catch (e) {
+          debugPrint('[SchoolService update error]: ${e.code} ${e.message}');
+          throw Exception('Failed to update school configuration: ${e.message}');
+        }
+      } else {
+        // Record does NOT exist -> Safely INSERT/UPSERT for the authorized school
+        final insertData = <String, dynamic>{
+          'name': cleanName,
+          'status': 'ACTIVE',
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+        if (isUuid) {
+          insertData['id'] = cleanId;
+          insertData['code'] = 'SCH-${cleanId.substring(0, 6).toUpperCase()}';
+        } else {
+          insertData['code'] = cleanId.toUpperCase();
+        }
+        if (address != null) insertData['address'] = address.trim();
+        if (phone != null) insertData['phone'] = phone.trim();
+        if (email != null) insertData['email'] = email.trim();
+        if (logoUrl != null) insertData['logo_url'] = logoUrl.trim();
+
+        try {
+          final insertRes = await _client!
+              .from('schools')
+              .upsert(insertData, onConflict: isUuid ? 'id' : 'code')
+              .select()
+              .maybeSingle();
+
+          if (insertRes != null) {
+            final model = _mapDataToSchoolModel(Map<String, dynamic>.from(insertRes));
+            _localCache[cleanId] = model;
+            return model;
+          }
+        } on PostgrestException catch (e) {
+          debugPrint('[SchoolService insert error]: ${e.code} ${e.message}');
+          throw Exception('Failed to save new school configuration: ${e.message}');
+        }
+      }
+
+      // If server returned 0 rows (e.g. RLS blocked update)
+      throw Exception('Server did not return updated school record. Please check your administrative permissions.');
     }
 
     // Local / offline fallback
-    return SchoolModel(
+    final model = SchoolModel(
       id: cleanId,
-      schoolCode: '—',
-      name: name.trim(),
+      schoolCode: cleanId.contains('-') ? 'SCH-${cleanId.substring(0, 6).toUpperCase()}' : cleanId.toUpperCase(),
+      name: cleanName,
       address: address?.trim(),
       phone: phone?.trim(),
       email: email?.trim(),
       logoUrl: logoUrl,
       createdAt: DateTime.now(),
     );
+    _localCache[cleanId] = model;
+    return model;
   }
 
   SchoolModel _mapDataToSchoolModel(Map<String, dynamic> data) {

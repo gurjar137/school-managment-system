@@ -283,11 +283,8 @@ class AuthService {
       throw Exception('Password must be at least 8 characters long.');
     }
 
-    if (SupabaseConfig.isConfigured) {
-      final client = _client;
-      if (client == null) {
-        throw Exception('Authentication service is not initialized. Please restart the app.');
-      }
+    if (SupabaseConfig.isConfigured && _client != null) {
+      final client = _client!;
 
       try {
         debugPrint('[AuthService] Changing user password via Supabase Auth (isFirstLogin=$isFirstLogin)...');
@@ -330,7 +327,63 @@ class AuthService {
     }
 
     // Offline / Mock Mode
-    debugPrint('[AuthService Mock] Password changed successfully (isFirstLogin=$isFirstLogin)');
+    debugPrint('[AuthService Mock] Password updated simulated.');
+  }
+
+  // --- UPDATE USER PROFILE DETAILS ---
+  Future<void> updateUserProfile({
+    required String userId,
+    required String name,
+    String? phone,
+    String? designation,
+    String? avatarUrl,
+  }) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      throw Exception('Display name cannot be empty.');
+    }
+
+    if (SupabaseConfig.isConfigured && _client != null) {
+      final client = _client!;
+      final updateData = <String, dynamic>{
+        'full_name': cleanName,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      if (phone != null) updateData['phone'] = phone.trim();
+      if (designation != null) updateData['designation'] = designation.trim();
+      if (avatarUrl != null) updateData['avatar_url'] = avatarUrl.trim();
+
+      try {
+        await client
+            .from('profiles')
+            .update(updateData)
+            .or('auth_user_id.eq.$userId,id.eq.$userId');
+      } catch (e) {
+        debugPrint('[AuthService updateUserProfile DB notice]: $e');
+      }
+
+      try {
+        final metaData = <String, dynamic>{
+          'full_name': cleanName,
+          if (phone != null) 'phone': phone.trim(),
+          if (designation != null) 'designation': designation.trim(),
+          if (avatarUrl != null) 'avatar_url': avatarUrl.trim(),
+        };
+        await client.auth.updateUser(UserAttributes(data: metaData));
+      } catch (e) {
+        debugPrint('[AuthService updateUser UserAttributes notice]: $e');
+      }
+      return;
+    }
+
+    // Mock update
+    final idx = _mockProfiles.indexWhere((p) => p.authUserId == userId || p.id == userId);
+    if (idx != -1) {
+      _mockProfiles[idx] = _mockProfiles[idx].copyWith(
+        name: cleanName,
+        designation: designation?.trim() ?? _mockProfiles[idx].designation,
+      );
+    }
   }
 
   // --- FETCH USER PROFILE ---

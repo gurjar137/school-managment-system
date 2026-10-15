@@ -141,7 +141,13 @@ class AcademicYearOption {
     final activeYears = years.where((y) => y.status == AccountStatus.active).toList();
     if (activeYears.isEmpty) return null;
 
-    // 2. Primary check: today falls within [startDate, endDate]
+    // 2. Primary check: if explicit is_current flag is set on an active year
+    final markedCurrent = activeYears.where((y) => y.isCurrent).toList();
+    if (markedCurrent.isNotEmpty) {
+      return markedCurrent.first;
+    }
+
+    // 3. Secondary check: today falls within [startDate, endDate]
     for (final y in activeYears) {
       if (y.startDate != null && y.endDate != null) {
         final start = DateTime(y.startDate!.year, y.startDate!.month, y.startDate!.day);
@@ -150,12 +156,6 @@ class AcademicYearOption {
           return y;
         }
       }
-    }
-
-    // 3. Secondary check: if explicit is_current flag is set on an active year
-    final markedCurrent = activeYears.where((y) => y.isCurrent).toList();
-    if (markedCurrent.isNotEmpty) {
-      return markedCurrent.first;
     }
 
     // 4. Fallback: most recent active year by startDate or name

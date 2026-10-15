@@ -168,6 +168,32 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
     }
   }
 
+  Future<void> _makeCurrentSession(AcademicYearModel year) async {
+    final profile = ref.read(authProvider);
+    final schoolId = profile?.schoolId?.trim() ?? '';
+
+    try {
+      final service = ref.read(academicYearServiceProvider);
+      await service.setCurrentAcademicYear(id: year.id, schoolId: schoolId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.mutedGreen,
+            content: Text('Academic Year "${year.name}" set as current active session!'),
+          ),
+        );
+        _loadAcademicYears();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppColors.softCoral, content: Text('Failed to set active session: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _handleDelete(AcademicYearModel year) async {
     final profile = ref.read(authProvider);
     final schoolId = profile?.schoolId?.trim() ?? '';
@@ -195,66 +221,72 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
       // Deletion blocked
       showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.darkSurfaceVariant,
-          title: Row(
-            children: [
-              const Icon(Icons.warning_amber_rounded, color: AppColors.softCoral),
-              const SizedBox(width: 8),
-              Text('Cannot Delete Academic Year', style: AppTypography.titleMedium.copyWith(color: AppColors.softCoral)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Academic Year "${year.name}" is actively referenced by:',
-                style: AppTypography.bodyMedium,
-              ),
-              const SizedBox(height: 10),
-              ...dependencies.map(
-                (dep) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.circle, size: 6, color: AppColors.amberDark),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(dep, style: AppTypography.bodySmall.copyWith(color: AppColors.amberDark))),
-                    ],
+        builder: (ctx) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          return AlertDialog(
+            backgroundColor: isDark ? AppColors.darkSurfaceVariant : Colors.white,
+            title: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: AppColors.softCoral),
+                const SizedBox(width: 8),
+                Text('Cannot Delete Academic Year', style: AppTypography.titleMedium.copyWith(color: AppColors.softCoral)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Academic Year "${year.name}" is actively referenced by:',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
                   ),
                 ),
+                const SizedBox(height: 10),
+                ...dependencies.map(
+                  (dep) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.circle, size: 6, color: AppColors.amberDark),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(dep, style: AppTypography.bodySmall.copyWith(color: AppColors.amberDark))),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.midnightNavy.withValues(alpha: 0.5) : AppColors.mainBackground,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isDark ? AppColors.borderDark : AppColors.border),
+                  ),
+                  child: Text(
+                    'To preserve historical records, student enrolments, and financial integrity, '
+                    'please toggle this academic year to INACTIVE instead of deleting it.',
+                    style: AppTypography.bodySmall.copyWith(color: isDark ? AppColors.coolGray : AppColors.secondaryText),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close'),
               ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.midnightNavy.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'To preserve historical records, student enrolments, and financial integrity, '
-                  'please toggle this academic year to INACTIVE instead of deleting it.',
-                  style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
-                ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.softLavender),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _toggleStatus(year);
+                },
+                child: const Text('Deactivate Instead'),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.softLavender),
-              onPressed: () {
-                Navigator.pop(ctx);
-                _toggleStatus(year);
-              },
-              child: const Text('Deactivate Instead'),
-            ),
-          ],
-        ),
+          );
+        },
       );
       return;
     }
@@ -262,45 +294,50 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
     // Confirmation for safe delete
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.darkSurfaceVariant,
-        title: Text('Delete Academic Year?', style: AppTypography.titleMedium.copyWith(color: AppColors.softCoral)),
-        content: Text(
-          'Are you sure you want to permanently delete "${year.name}"? This action cannot be undone.',
-          style: AppTypography.bodyMedium,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? AppColors.darkSurfaceVariant : Colors.white,
+          title: Text('Delete Academic Year?', style: AppTypography.titleMedium.copyWith(color: AppColors.softCoral)),
+          content: Text(
+            'Are you sure you want to permanently delete "${year.name}"? This action cannot be undone.',
+            style: AppTypography.bodyMedium.copyWith(
+              color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+            ),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.softCoral),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                await service.deleteAcademicYear(id: year.id, schoolId: schoolId);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      backgroundColor: AppColors.mutedGreen,
-                      content: Text('Academic Year "${year.name}" deleted.'),
-                    ),
-                  );
-                  _loadAcademicYears();
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.softCoral),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  await service.deleteAcademicYear(id: year.id, schoolId: schoolId);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: AppColors.mutedGreen,
+                        content: Text('Academic Year "${year.name}" deleted.'),
+                      ),
+                    );
+                    _loadAcademicYears();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(backgroundColor: AppColors.softCoral, content: Text('$e')),
+                    );
+                  }
                 }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(backgroundColor: AppColors.softCoral, content: Text('$e')),
-                  );
-                }
-              }
-            },
-            child: const Text('Delete Permanently'),
-          ),
-        ],
-      ),
+              },
+              child: const Text('Delete Permanently', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -506,7 +543,9 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
                                     Text(
                                       year.dateRangeFormatted,
                                       style: AppTypography.bodySmall.copyWith(
-                                        color: AppColors.pureWhite,
+                                        color: Theme.of(context).brightness == Brightness.dark
+                                            ? AppColors.pureWhite
+                                            : AppColors.midnightNavy,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -517,46 +556,72 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
                                 const SizedBox(height: 10),
 
                                 // Actions row
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    // Status toggle
-                                    TextButton.icon(
-                                      icon: Icon(
-                                        isActive ? Icons.toggle_on_rounded : Icons.toggle_off_rounded,
-                                        color: isActive ? AppColors.mutedGreen : AppColors.coolGray,
-                                        size: 20,
-                                      ),
-                                      label: Text(
-                                        isActive ? 'Deactivate' : 'Activate',
-                                        style: TextStyle(
-                                          color: isActive ? AppColors.pureWhite : AppColors.coolGray,
-                                          fontWeight: FontWeight.w600,
+                                Builder(
+                                  builder: (ctx) {
+                                    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+                                    return Wrap(
+                                      alignment: WrapAlignment.end,
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      spacing: 8,
+                                      runSpacing: 6,
+                                      children: [
+                                        // Set as Current Session button
+                                        if (!isCurrent && isActive)
+                                          ElevatedButton.icon(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppColors.softLavender,
+                                              foregroundColor: Colors.white,
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                            ),
+                                            icon: const Icon(Icons.star_outline_rounded, size: 14),
+                                            label: const Text('Set Current'),
+                                            onPressed: () => _makeCurrentSession(year),
+                                          ),
+
+                                        // Status toggle (Activate / Deactivate)
+                                        TextButton.icon(
+                                          icon: Icon(
+                                            isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                                            color: isActive ? AppColors.amberDark : AppColors.mutedGreen,
+                                            size: 18,
+                                          ),
+                                          label: Text(
+                                            isActive ? 'Deactivate' : 'Activate',
+                                            style: TextStyle(
+                                              color: isActive ? AppColors.amberDark : AppColors.mutedGreen,
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          onPressed: () => _toggleStatus(year),
                                         ),
-                                      ),
-                                      onPressed: () => _toggleStatus(year),
-                                    ),
-                                    const SizedBox(width: 8),
 
-                                    // Edit button
-                                    OutlinedButton.icon(
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: AppColors.pureWhite,
-                                        side: const BorderSide(color: AppColors.coolGray, width: 0.8),
-                                      ),
-                                      icon: const Icon(Icons.edit_outlined, size: 15),
-                                      label: const Text('Edit'),
-                                      onPressed: () => _showEditDialog(year),
-                                    ),
-                                    const SizedBox(width: 8),
+                                        // Edit button
+                                        OutlinedButton.icon(
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+                                            side: BorderSide(
+                                              color: isDark ? AppColors.coolGray : AppColors.border,
+                                              width: 1,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                            textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                          ),
+                                          icon: const Icon(Icons.edit_outlined, size: 14),
+                                          label: const Text('Edit'),
+                                          onPressed: () => _showEditDialog(year),
+                                        ),
 
-                                    // Delete button
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline_rounded, color: AppColors.softCoral, size: 20),
-                                      tooltip: 'Delete Academic Year',
-                                      onPressed: () => _handleDelete(year),
-                                    ),
-                                  ],
+                                        // Delete button
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline_rounded, color: AppColors.softCoral, size: 20),
+                                          tooltip: 'Delete Academic Year',
+                                          onPressed: () => _handleDelete(year),
+                                        ),
+                                      ],
+                                    );
+                                  },
                                 ),
                               ],
                             ),
@@ -616,6 +681,7 @@ class _AcademicYearDialogState extends State<AcademicYearDialog> {
 
   Future<void> _pickDate({required bool isStart}) async {
     final initial = isStart ? (_startDate ?? DateTime.now()) : (_endDate ?? DateTime.now());
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -623,11 +689,17 @@ class _AcademicYearDialogState extends State<AcademicYearDialog> {
       lastDate: DateTime(2040),
       builder: (ctx, child) => Theme(
         data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: AppColors.softLavender,
-            surface: AppColors.darkSurfaceVariant,
-            onSurface: AppColors.pureWhite,
-          ),
+          colorScheme: isDark
+              ? const ColorScheme.dark(
+                  primary: AppColors.softLavender,
+                  surface: AppColors.darkSurfaceVariant,
+                  onSurface: AppColors.pureWhite,
+                )
+              : const ColorScheme.light(
+                  primary: AppColors.indigo,
+                  surface: Colors.white,
+                  onSurface: AppColors.midnightNavy,
+                ),
         ),
         child: child!,
       ),
@@ -688,10 +760,17 @@ class _AcademicYearDialogState extends State<AcademicYearDialog> {
   @override
   Widget build(BuildContext context) {
     final df = DateFormat('dd MMM yyyy');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AlertDialog(
-      backgroundColor: AppColors.darkSurfaceVariant,
-      title: Text(widget.title, style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.w800)),
+      backgroundColor: isDark ? AppColors.darkSurfaceVariant : Colors.white,
+      title: Text(
+        widget.title,
+        style: AppTypography.titleMedium.copyWith(
+          fontWeight: FontWeight.w800,
+          color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+        ),
+      ),
       content: SizedBox(
         width: 460,
         child: Form(
@@ -725,7 +804,13 @@ class _AcademicYearDialogState extends State<AcademicYearDialog> {
                   ),
 
                 // Name Input
-                Text('ACADEMIC YEAR NAME', style: AppTypography.labelSmall.copyWith(color: AppColors.softLavender, fontWeight: FontWeight.w800)),
+                Text(
+                  'ACADEMIC YEAR NAME',
+                  style: AppTypography.labelSmall.copyWith(
+                    color: isDark ? AppColors.softLavender : AppColors.indigo,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 const SizedBox(height: 6),
                 TextFormField(
                   controller: _nameCtrl,
@@ -750,7 +835,13 @@ class _AcademicYearDialogState extends State<AcademicYearDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('START DATE', style: AppTypography.labelSmall.copyWith(color: AppColors.softLavender, fontWeight: FontWeight.w800)),
+                          Text(
+                            'START DATE',
+                            style: AppTypography.labelSmall.copyWith(
+                              color: isDark ? AppColors.softLavender : AppColors.indigo,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                           const SizedBox(height: 6),
                           InkWell(
                             onTap: () => _pickDate(isStart: true),
@@ -758,18 +849,21 @@ class _AcademicYearDialogState extends State<AcademicYearDialog> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               decoration: BoxDecoration(
-                                color: AppColors.midnightNavy,
+                                color: isDark ? AppColors.darkSurface : AppColors.mainBackground,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.coolGray.withValues(alpha: 0.3)),
+                                border: Border.all(color: isDark ? AppColors.borderDark : AppColors.border),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.calendar_today_rounded, size: 16, color: AppColors.softLavender),
+                                  Icon(Icons.calendar_today_rounded, size: 16, color: isDark ? AppColors.softLavender : AppColors.indigo),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       _startDate != null ? df.format(_startDate!) : 'Select',
-                                      style: AppTypography.bodyMedium,
+                                      style: AppTypography.bodyMedium.copyWith(
+                                        color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -786,7 +880,13 @@ class _AcademicYearDialogState extends State<AcademicYearDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('END DATE', style: AppTypography.labelSmall.copyWith(color: AppColors.softLavender, fontWeight: FontWeight.w800)),
+                          Text(
+                            'END DATE',
+                            style: AppTypography.labelSmall.copyWith(
+                              color: isDark ? AppColors.softLavender : AppColors.indigo,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                           const SizedBox(height: 6),
                           InkWell(
                             onTap: () => _pickDate(isStart: false),
@@ -794,18 +894,21 @@ class _AcademicYearDialogState extends State<AcademicYearDialog> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                               decoration: BoxDecoration(
-                                color: AppColors.midnightNavy,
+                                color: isDark ? AppColors.darkSurface : AppColors.mainBackground,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.coolGray.withValues(alpha: 0.3)),
+                                border: Border.all(color: isDark ? AppColors.borderDark : AppColors.border),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.event_available_rounded, size: 16, color: AppColors.softLavender),
+                                  Icon(Icons.event_available_rounded, size: 16, color: isDark ? AppColors.softLavender : AppColors.indigo),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       _endDate != null ? df.format(_endDate!) : 'Select',
-                                      style: AppTypography.bodyMedium,
+                                      style: AppTypography.bodyMedium.copyWith(
+                                        color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -823,21 +926,29 @@ class _AcademicYearDialogState extends State<AcademicYearDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Operational Status', style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w700)),
-                        Text(
-                          _status == AccountStatus.active
-                              ? 'Active: available for attendance, fees & classes'
-                              : 'Inactive: historical records preserved, restricted from new entries',
-                          style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray, fontSize: 11),
-                        ),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Operational Status',
+                            style: AppTypography.titleSmall.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+                            ),
+                          ),
+                          Text(
+                            _status == AccountStatus.active
+                                ? 'Active: available for attendance, fees & classes'
+                                : 'Inactive: historical records preserved, restricted from new entries',
+                            style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray, fontSize: 11),
+                          ),
+                        ],
+                      ),
                     ),
                     Switch(
                       value: _status == AccountStatus.active,
-                      activeThumbColor: AppColors.mutedGreen,
+                      activeColor: AppColors.mutedGreen,
                       onChanged: (val) {
                         setState(() {
                           _status = val ? AccountStatus.active : AccountStatus.inactive;
@@ -861,7 +972,7 @@ class _AcademicYearDialogState extends State<AcademicYearDialog> {
           onPressed: _isSubmitting ? null : _handleSave,
           child: _isSubmitting
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.pureWhite))
-              : Text(widget.submitLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+              : Text(widget.submitLabel, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         ),
       ],
     );

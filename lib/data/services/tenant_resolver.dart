@@ -125,6 +125,31 @@ class TenantResolver {
 
     // 3. Online Authoritative Validation
     if (profile == null) {
+      final meta = user.userMetadata;
+      final metaSchoolId = meta?['school_id']?.toString().trim();
+      if (metaSchoolId != null && metaSchoolId.isNotEmpty) {
+        try {
+          final fullName = meta?['full_name']?.toString() ?? user.email?.split('@').first ?? 'User';
+          final role = meta?['role']?.toString().toLowerCase().trim() ?? 'school_admin';
+          final insRes = await effectiveClient.from('profiles').insert({
+            'auth_user_id': user.id,
+            'school_id': metaSchoolId,
+            'full_name': fullName,
+            'email': user.email ?? '',
+            'role': role,
+            'status': 'active',
+          }).select('id, auth_user_id, school_id, role, status').maybeSingle();
+
+          if (insRes != null) {
+            profile = Map<String, dynamic>.from(insRes);
+          }
+        } catch (e) {
+          debugPrint('[TenantResolver Self-Heal Warning]: $e');
+        }
+      }
+    }
+
+    if (profile == null) {
       throw const TenantResolutionException(
         'Account authenticated, but user profile could not be found in the database. Please contact school administration.',
       );

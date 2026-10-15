@@ -102,8 +102,8 @@ class AcademicYearService {
     final start = DateTime(startDate.year, startDate.month, startDate.day);
     final end = DateTime(endDate.year, endDate.month, endDate.day);
 
-    if (end.isBefore(start)) {
-      throw const AcademicYearValidationException('End date cannot be before start date.');
+    if (end.isBefore(start) || end.isAtSameMomentAs(start)) {
+      throw const AcademicYearValidationException('End date cannot be before start date (End date must be after start date).');
     }
 
     for (final existing in existingYears) {
@@ -316,31 +316,60 @@ class AcademicYearService {
 
     if (_client != null && SupabaseConfig.isConfigured) {
       try {
-        // Deactivate is_current across the school first
-        await _client!
-            .from('academic_years')
-            .update({'is_current': false})
-            .eq('school_id', cleanSchoolId);
+        // 1. Try atomic database RPC first if available
+        bool rpcSucceeded = false;
+        try {
+          final rpcRes = await _client!.rpc('set_current_academic_year', params: {
+            'p_year_id': cleanId,
+            'p_school_id': cleanSchoolId,
+          });
+          if (rpcRes != null) {
+            rpcSucceeded = true;
+          }
+        } catch (_) {}
 
-        // Activate the chosen academic year
-        final res = await _client!
-            .from('academic_years')
-            .update({'is_current': true, 'status': 'ACTIVE'})
-            .eq('id', cleanId)
-            .eq('school_id', cleanSchoolId)
-            .select()
-            .single();
+        if (!rpcSucceeded) {
+          // 2. Fallback: Deactivate all other sessions in the school
+          try {
+            await _client!
+                .from('academic_years')
+                .update({'is_current': false})
+                .eq('school_id', cleanSchoolId);
+          } catch (_) {
+            // Column is_current may not exist yet, fallback to status
+          }
 
-        final updated = AcademicYearModel.fromJson(Map<String, dynamic>.from(res));
-        for (int i = 0; i < _cache.length; i++) {
-          if (_cache[i].schoolId == cleanSchoolId) {
-            _cache[i] = _cache[i].copyWith(
-              isCurrent: _cache[i].id == cleanId,
-              status: _cache[i].id == cleanId ? AccountStatus.active : _cache[i].status,
-            );
+          // Activate chosen session
+          final updatePayload = <String, dynamic>{'status': 'ACTIVE'};
+          try {
+            updatePayload['is_current'] = true;
+          } catch (_) {}
+
+          try {
+            final res = await _client!
+                .from('academic_years')
+                .update(updatePayload)
+                .eq('id', cleanId)
+                .eq('school_id', cleanSchoolId)
+                .select()
+                .maybeSingle();
+
+            if (res != null) {
+              final updated = AcademicYearModel.fromJson(Map<String, dynamic>.from(res));
+              for (int i = 0; i < _cache.length; i++) {
+                if (_cache[i].schoolId == cleanSchoolId) {
+                  _cache[i] = _cache[i].copyWith(
+                    isCurrent: _cache[i].id == cleanId,
+                    status: _cache[i].id == cleanId ? AccountStatus.active : _cache[i].status,
+                  );
+                }
+              }
+              return updated;
+            }
+          } catch (e) {
+            debugPrint('[AcademicYearService setCurrentAcademicYear direct update note]: $e');
           }
         }
-        return updated;
       } catch (e) {
         debugPrint('[AcademicYearService setCurrentAcademicYear DB note]: $e');
       }

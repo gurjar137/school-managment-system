@@ -7,6 +7,7 @@ import '../../core/providers/app_providers.dart';
 import '../../core/widgets/reusable_widgets.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../data/services/tenant_resolver.dart';
+import '../../data/models/notification_preferences_model.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -22,6 +23,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _sectionCount = 0;
   String _activeSessionName = 'Loading session...';
   bool _isLoadingMetrics = true;
+  NotificationPreferencesModel? _notifPrefs;
 
   @override
   void initState() {
@@ -43,6 +45,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final teacherService = ref.read(teacherServiceProvider);
       final classService = ref.read(classSectionServiceProvider);
       final academicYearService = ref.read(academicYearServiceProvider);
+      final notifService = ref.read(notificationPreferencesServiceProvider);
 
       // 1. Cutoff time
       final cutoff = await attendanceService.getCutoffTime(schoolId);
@@ -66,12 +69,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         }
       }
 
+      // 4. Notification Preferences
+      final notifPrefs = await notifService.getPreferences(schoolId, userId: user?.id);
+
       if (mounted) {
         setState(() {
           _cutoffTime = cutoff;
           _subjectCount = subjects.length;
           _classCount = classCount;
           _sectionCount = sectionCount;
+          _notifPrefs = notifPrefs;
           _activeSessionName = currentYear != null
               ? 'Session ${currentYear.name} • Active'
               : 'No Active Academic Session';
@@ -190,81 +197,184 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   void _showNotificationPreferencesDialog() {
+    final user = ref.read(authProvider);
+    final schoolId = user?.schoolId?.trim() ?? 'default';
+    final notifService = ref.read(notificationPreferencesServiceProvider);
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.notifications_active_outlined, color: AppColors.indigo),
-            SizedBox(width: 10),
-            Text('Push & Notification Alerts'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Configure notifications sent to administrators, teachers, and parents.',
-                style: AppTypography.bodySmall.copyWith(color: AppColors.secondaryText),
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final prefs = _notifPrefs ?? NotificationPreferencesModel.defaults(schoolId, userId: user?.id);
+
+            return AlertDialog(
+              backgroundColor: isDark ? AppColors.darkSurfaceVariant : Colors.white,
+              title: Row(
+                children: [
+                  const Icon(Icons.notifications_active_outlined, color: AppColors.indigo),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Push & Notification Alerts',
+                    style: AppTypography.titleMedium.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              const SwitchListTile(
-                value: true,
-                onChanged: null,
-                title: Text('Staff Timetable & Leave Alerts'),
-                subtitle: Text('Notify faculty on substitution or leave approvals'),
-                contentPadding: EdgeInsets.zero,
-              ),
-              const Divider(height: 1),
-              const SwitchListTile(
-                value: true,
-                onChanged: null,
-                title: Text('Parent Attendance Warnings'),
-                subtitle: Text('Alert parents when student is absent past cutoff'),
-                contentPadding: EdgeInsets.zero,
-              ),
-              const Divider(height: 1),
-              const SwitchListTile(
-                value: true,
-                onChanged: null,
-                title: Text('Fee Reminder Notices'),
-                subtitle: Text('Send payment receipts and pending fee reminders'),
-                contentPadding: EdgeInsets.zero,
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.mainBackground,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Row(
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.coolGray),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'In-App Dispatch: ACTIVE • Remote Push: Requires Firebase Cloud Messaging (FCM) credentials configuration for background device delivery.',
-                        style: AppTypography.labelSmall.copyWith(color: AppColors.coolGray, fontSize: 11),
+                    Text(
+                      'Configure notifications sent to administrators, teachers, and parents.',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: isDark ? AppColors.coolGray : AppColors.secondaryText,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Toggle 1: Staff Timetable & Leave Alerts
+                    SwitchListTile(
+                      value: prefs.timetableAlerts,
+                      activeColor: AppColors.softLavender,
+                      title: Text(
+                        'Staff Timetable & Leave Alerts',
+                        style: AppTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Notify faculty on timetable substitution or leave approvals',
+                        style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) async {
+                        final updated = prefs.copyWith(timetableAlerts: val);
+                        setDialogState(() => _notifPrefs = updated);
+                        setState(() => _notifPrefs = updated);
+                        await notifService.savePreferences(updated);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: val ? AppColors.mutedGreen : AppColors.coolGray,
+                              duration: const Duration(seconds: 2),
+                              content: Text('Staff Timetable & Leave Alerts ${val ? 'enabled' : 'disabled'}.'),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    const Divider(height: 1),
+
+                    // Toggle 2: Parent Attendance Warnings
+                    SwitchListTile(
+                      value: prefs.attendanceAlerts,
+                      activeColor: AppColors.softLavender,
+                      title: Text(
+                        'Parent Attendance Warnings',
+                        style: AppTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Alert parents when student is absent past attendance cutoff',
+                        style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) async {
+                        final updated = prefs.copyWith(attendanceAlerts: val);
+                        setDialogState(() => _notifPrefs = updated);
+                        setState(() => _notifPrefs = updated);
+                        await notifService.savePreferences(updated);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: val ? AppColors.mutedGreen : AppColors.coolGray,
+                              duration: const Duration(seconds: 2),
+                              content: Text('Parent Attendance Warnings ${val ? 'enabled' : 'disabled'}.'),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    const Divider(height: 1),
+
+                    // Toggle 3: Fee Reminder Notices
+                    SwitchListTile(
+                      value: prefs.feeAlerts,
+                      activeColor: AppColors.softLavender,
+                      title: Text(
+                        'Fee Reminder Notices',
+                        style: AppTypography.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? AppColors.pureWhite : AppColors.midnightNavy,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Send payment receipts and pending fee reminders',
+                        style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) async {
+                        final updated = prefs.copyWith(feeAlerts: val);
+                        setDialogState(() => _notifPrefs = updated);
+                        setState(() => _notifPrefs = updated);
+                        await notifService.savePreferences(updated);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: val ? AppColors.mutedGreen : AppColors.coolGray,
+                              duration: const Duration(seconds: 2),
+                              content: Text('Fee Reminder Notices ${val ? 'enabled' : 'disabled'}.'),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Info Container
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.midnightNavy.withValues(alpha: 0.5) : AppColors.mainBackground,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: isDark ? AppColors.borderDark : AppColors.border),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.coolGray),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'In-App Dispatch: ACTIVE • Remote Push: Requires Firebase Cloud Messaging (FCM) credentials configuration for background device delivery.',
+                              style: AppTypography.labelSmall.copyWith(color: AppColors.coolGray, fontSize: 11),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
+              actions: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.softLavender),
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Done', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

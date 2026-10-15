@@ -32,6 +32,7 @@ import '../../data/models/academic_models.dart';
 import '../../data/services/tenant_access_service.dart';
 import '../../data/services/academic_year_service.dart';
 import '../../data/services/tenant_resolver.dart';
+import '../../data/services/notification_preferences_service.dart';
 export 'timetable_providers.dart';
 
 // Supabase Client Provider
@@ -79,6 +80,10 @@ final transportServiceProvider = Provider<TransportService>((ref) {
 
 final academicYearServiceProvider = Provider<AcademicYearService>((ref) {
   return AcademicYearService();
+});
+
+final notificationPreferencesServiceProvider = Provider<NotificationPreferencesService>((ref) {
+  return NotificationPreferencesService();
 });
 
 class AdminDashboardMetrics {
@@ -841,6 +846,40 @@ class AuthNotifier extends StateNotifier<UserModel?> {
   }
 
   UserProfileModel? get activeProfile => _activeProfile;
+
+  Future<void> updateProfile({
+    required String name,
+    String? phone,
+    String? designation,
+    String? avatarUrl,
+  }) async {
+    final current = state;
+    if (current == null) return;
+
+    final updated = UserModel(
+      id: current.id,
+      schoolId: current.schoolId,
+      name: name.trim(),
+      email: current.email,
+      role: current.role,
+      avatarUrl: avatarUrl ?? current.avatarUrl,
+      schoolName: current.schoolName,
+      designation: designation?.trim() ?? current.designation,
+      assignedClass: current.assignedClass,
+      assignedSection: current.assignedSection,
+      subject: current.subject,
+      totalStudentsInClass: current.totalStudentsInClass,
+      status: current.status,
+    );
+    state = updated;
+
+    if (_activeProfile != null) {
+      _activeProfile = _activeProfile!.copyWith(
+        name: name.trim(),
+        designation: designation?.trim() ?? _activeProfile!.designation,
+      );
+    }
+  }
 
   void setUserProfile(UserProfileModel profile) {
     final oldSchoolId = _activeProfile?.schoolId;
