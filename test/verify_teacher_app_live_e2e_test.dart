@@ -94,6 +94,14 @@ class MockAuthNotifier extends StateNotifier<UserModel?> implements AuthNotifier
   Future<void> refreshProfile() async {}
 
   @override
+  Future<void> updateProfile({
+    required String name,
+    String? phone,
+    String? designation,
+    String? avatarUrl,
+  }) async {}
+
+  @override
   Future<void> logout() async {
     _profile = null;
     state = null;

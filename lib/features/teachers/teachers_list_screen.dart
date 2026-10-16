@@ -28,6 +28,10 @@ class _TeachersListScreenState extends ConsumerState<TeachersListScreen> {
   Widget build(BuildContext context) {
     final teacherService = ref.watch(teacherServiceProvider);
     final user = ref.watch(authProvider);
+    final activeProfile = ref.watch(authProvider.notifier).activeProfile;
+    final targetSchoolId = (activeProfile?.schoolId != null && activeProfile!.schoolId.isNotEmpty)
+        ? activeProfile.schoolId
+        : user?.schoolId;
     final canManage = user?.role.isAdministrator ?? false;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -35,6 +39,11 @@ class _TeachersListScreenState extends ConsumerState<TeachersListScreen> {
       appBar: AppBar(
         title: Text('Faculty & Teachers Directory', style: AppTypography.titleLarge),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh Directory',
+            onPressed: () => setState(() {}),
+          ),
           if (canManage)
             IconButton(
               icon: const Icon(Icons.person_add_alt_1_rounded, color: AppColors.softLavender),
@@ -74,7 +83,7 @@ class _TeachersListScreenState extends ConsumerState<TeachersListScreen> {
           Expanded(
             child: FutureBuilder<List<TeacherModel>>(
               future: teacherService.getTeachers(
-                schoolId: user?.schoolId,
+                schoolId: targetSchoolId,
                 query: _searchCtrl.text,
                 includeStaff: true,
               ),
@@ -83,21 +92,62 @@ class _TeachersListScreenState extends ConsumerState<TeachersListScreen> {
                   return const LoadingStateWidget(message: 'Loading faculty directory...');
                 }
 
-                final teachers = snapshot.data ?? [];
-
-                if (teachers.isEmpty) {
-                  return const EmptyStateWidget(
-                    icon: Icons.person_off_rounded,
-                    title: 'No Faculty Records Found',
-                    message: 'No teachers match your search query.',
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: AppColors.softCoral, size: 48),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Failed to load faculty directory',
+                            style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            snapshot.error.toString().replaceAll('Exception: ', ''),
+                            textAlign: TextAlign.center,
+                            style: AppTypography.bodySmall.copyWith(color: AppColors.coolGray),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: () => setState(() {}),
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: teachers.length,
-                  itemBuilder: (context, index) {
-                    final t = teachers[index];
+                final teachers = snapshot.data ?? [];
+
+                if (teachers.isEmpty) {
+                  return RefreshIndicator(
+                    onRefresh: () async => setState(() {}),
+                    child: ListView(
+                      children: [
+                        SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                        const EmptyStateWidget(
+                          icon: Icons.person_off_rounded,
+                          title: 'No Faculty Records Found',
+                          message: 'No teachers match your search query or have been enrolled yet.',
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return RefreshIndicator(
+                  onRefresh: () async => setState(() {}),
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: teachers.length,
+                    itemBuilder: (context, index) {
+                      final t = teachers[index];
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
@@ -120,7 +170,7 @@ class _TeachersListScreenState extends ConsumerState<TeachersListScreen> {
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                             decoration: BoxDecoration(
-                                              color: AppColors.softLavender.withOpacity(0.15),
+                                              color: AppColors.softLavender.withValues(alpha: 0.15),
                                               borderRadius: BorderRadius.circular(6),
                                             ),
                                             child: Text(
@@ -212,8 +262,9 @@ class _TeachersListScreenState extends ConsumerState<TeachersListScreen> {
                       ),
                     );
                   },
-                );
-              },
+                ),
+              );
+            },
             ),
           ),
         ],

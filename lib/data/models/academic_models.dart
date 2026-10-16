@@ -323,8 +323,9 @@ class HomeworkModel {
   }
 
   Map<String, dynamic> toJson({String? schoolId, String? academicYearId, String? createdBy}) {
+    final isUuid = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(id);
     return {
-      if (id.isNotEmpty) 'id': id,
+      if (id.isNotEmpty && isUuid) 'id': id,
       if (schoolId != null) 'school_id': schoolId,
       if (academicYearId != null) 'academic_year_id': academicYearId,
       'class_name': className,

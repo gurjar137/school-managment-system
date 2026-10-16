@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../data/models/class_section_models.dart';
 import '../../../data/models/academic_models.dart';
 import '../../../data/models/timetable_model.dart';
 import '../../../data/services/timetable_service.dart';
+import '../../../data/services/class_section_service.dart';
 
 class TimetablePeriodDialog extends StatefulWidget {
   final String schoolId;
@@ -14,6 +16,7 @@ class TimetablePeriodDialog extends StatefulWidget {
   final List<TeacherModel> availableTeachers;
   final List<SubjectModel> availableSubjects;
   final TimetableService timetableService;
+  final ClassSectionService? classSectionService;
   final List<TimetableEntryModel> existingEntries;
   final TimetableEntryModel? initialEntry;
   final String? preselectedClassId;
@@ -29,6 +32,7 @@ class TimetablePeriodDialog extends StatefulWidget {
     required this.availableTeachers,
     required this.availableSubjects,
     required this.timetableService,
+    this.classSectionService,
     required this.existingEntries,
     this.initialEntry,
     this.preselectedClassId,
@@ -58,6 +62,9 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
   String? _selectedSubjectId;
   String? _conflictMessage;
   bool _isSaving = false;
+  bool _isCustomSubject = false;
+  bool _isLoadingSections = false;
+  List<SectionModel> _currentSections = [];
 
   final List<Map<String, dynamic>> _days = [
     {'val': 1, 'name': 'Monday'},
@@ -93,6 +100,44 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
     _selectedTeacherName = entry?.teacherName;
     _selectedSubjectId = entry?.subjectId;
 
+    // Resolve initial subject state
+    if (widget.availableSubjects.isNotEmpty) {
+      if (_selectedSubjectId != null &&
+          widget.availableSubjects.any((s) => s.id == _selectedSubjectId)) {
+        _isCustomSubject = false;
+        final match = widget.availableSubjects.firstWhere((s) => s.id == _selectedSubjectId);
+        if (_subjectController.text.trim().isEmpty) {
+          _subjectController.text = match.name;
+        }
+      } else if (_subjectController.text.trim().isNotEmpty) {
+        final match = widget.availableSubjects.where(
+          (s) => s.name.trim().toLowerCase() == _subjectController.text.trim().toLowerCase(),
+        ).firstOrNull;
+        if (match != null) {
+          _selectedSubjectId = match.id;
+          _isCustomSubject = false;
+        } else {
+          _isCustomSubject = true;
+        }
+      } else {
+        _isCustomSubject = false;
+        _selectedSubjectId = widget.availableSubjects.first.id;
+        _subjectController.text = widget.availableSubjects.first.name;
+      }
+    } else {
+      _isCustomSubject = true;
+    }
+
+    // Populate initial sections
+    if (_selectedClassId != null) {
+      final matching = widget.availableSections.where((s) => s.classId == _selectedClassId).toList();
+      if (matching.isNotEmpty) {
+        _currentSections = matching;
+      } else if (widget.classSectionService != null) {
+        _loadSectionsForClass(_selectedClassId!);
+      }
+    }
+
     _checkLiveConflict();
   }
 
@@ -107,9 +152,24 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
     super.dispose();
   }
 
-  List<SectionModel> get _filteredSections {
-    if (_selectedClassId == null) return [];
-    return widget.availableSections.where((s) => s.classId == _selectedClassId).toList();
+  Future<void> _loadSectionsForClass(String classId) async {
+    if (widget.classSectionService == null) return;
+    setState(() => _isLoadingSections = true);
+    try {
+      final secs = await widget.classSectionService!.fetchSections(widget.schoolId, classId);
+      if (mounted) {
+        setState(() {
+          _currentSections = secs;
+          _isLoadingSections = false;
+          if (_selectedSectionId != null && !secs.any((s) => s.id == _selectedSectionId)) {
+            _selectedSectionId = null;
+          }
+        });
+        _checkLiveConflict();
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingSections = false);
+    }
   }
 
   void _checkLiveConflict() {
@@ -127,7 +187,8 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
 
   TimetableEntryModel _buildCandidate() {
     final selectedClass = widget.availableClasses.where((c) => c.id == _selectedClassId).firstOrNull;
-    final selectedSection = widget.availableSections.where((s) => s.id == _selectedSectionId).firstOrNull;
+    final selectedSection = _currentSections.where((s) => s.id == _selectedSectionId).firstOrNull ??
+        widget.availableSections.where((s) => s.id == _selectedSectionId).firstOrNull;
 
     return TimetableEntryModel(
       id: widget.initialEntry?.id ?? '',
@@ -182,11 +243,33 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
   }
 
   Future<void> _submit() async {
+    if (widget.availableClasses.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot create period: No classes configured yet.'),
+          backgroundColor: AppColors.softCoral,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedClassId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a class.'),
+          backgroundColor: AppColors.softCoral,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     final candidate = _buildCandidate();
 
-    // Check for hard conflict
+    // Check for collision
     final conflict = widget.timetableService.detectConflict(
       entry: candidate,
       existingEntries: widget.existingEntries,
@@ -204,7 +287,7 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
       return;
     }
 
-    // If editing published entry, request confirmation
+    // Confirmation if published
     if (widget.initialEntry != null && widget.initialEntry!.isPublished) {
       final proceed = await showDialog<bool>(
         context: context,
@@ -238,7 +321,10 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
     setState(() => _isSaving = true);
     try {
       if (widget.initialEntry != null) {
-        final updated = await widget.timetableService.updateEntry(candidate, forcePublishedUpdate: true);
+        final updated = await widget.timetableService.updateEntry(
+          candidate,
+          forcePublishedUpdate: true,
+        );
         if (mounted) Navigator.pop(context, updated);
       } else {
         final created = await widget.timetableService.createEntry(candidate);
@@ -263,10 +349,35 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
     final isEditing = widget.initialEntry != null;
     final isPublished = widget.initialEntry?.isPublished ?? false;
 
+    // Safe dropdown values to prevent assertion crashes
+    final hasValidClass = _selectedClassId != null &&
+        widget.availableClasses.any((c) => c.id == _selectedClassId);
+    final safeClassValue = hasValidClass
+        ? _selectedClassId
+        : (widget.availableClasses.isNotEmpty ? widget.availableClasses.first.id : null);
+
+    final hasValidSection = _selectedSectionId == null ||
+        _currentSections.any((s) => s.id == _selectedSectionId);
+    final safeSectionValue = hasValidSection ? _selectedSectionId : null;
+
+    final hasValidTeacher = _selectedTeacherId == null ||
+        widget.availableTeachers.any((t) => t.id == _selectedTeacherId);
+    final safeTeacherValue = hasValidTeacher ? _selectedTeacherId : null;
+
+    final hasValidSubject = _selectedSubjectId != null &&
+        widget.availableSubjects.any((s) => s.id == _selectedSubjectId);
+    final safeSubjectValue = _isCustomSubject
+        ? '__custom__'
+        : (hasValidSubject
+            ? _selectedSubjectId
+            : (widget.availableSubjects.isNotEmpty
+                ? widget.availableSubjects.first.id
+                : '__custom__'));
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 800),
+        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 820),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Form(
@@ -348,6 +459,54 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
                     ),
                   ),
 
+                // Honest Empty Class Banner
+                if (widget.availableClasses.isEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.softCoral.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.softCoral.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: AppColors.softCoral, size: 22),
+                            const SizedBox(width: 8),
+                            Text(
+                              'No Classes Available',
+                              style: AppTypography.titleSmall.copyWith(
+                                color: AppColors.softCoral,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'No classes were found for this academic session. Please add classes in Classes & Sections first.',
+                          style: AppTypography.bodySmall.copyWith(color: AppColors.secondaryText),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            context.push('/classes');
+                          },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.midnightNavy,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          ),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: const Text('Manage Classes & Sections'),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Scrollable Form Fields
                 Expanded(
                   child: ListView(
@@ -355,10 +514,11 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
                     children: [
                       // Row 1: Class and Section
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              initialValue: _selectedClassId,
+                              initialValue: safeClassValue,
                               decoration: const InputDecoration(
                                 labelText: 'Class *',
                                 prefixIcon: Icon(Icons.meeting_room_outlined),
@@ -369,29 +529,53 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
                                   child: Text(c.name),
                                 );
                               }).toList(),
-                              onChanged: (val) {
-                                setState(() {
-                                  _selectedClassId = val;
-                                  final secs = _filteredSections;
-                                  _selectedSectionId = secs.isNotEmpty ? secs.first.id : null;
-                                });
-                                _checkLiveConflict();
-                              },
+                              onChanged: widget.availableClasses.isEmpty
+                                  ? null
+                                  : (val) {
+                                      if (val == null) return;
+                                      setState(() {
+                                        _selectedClassId = val;
+                                        _selectedSectionId = null;
+                                      });
+                                      if (widget.classSectionService != null) {
+                                        _loadSectionsForClass(val);
+                                      } else {
+                                        setState(() {
+                                          _currentSections = widget.availableSections
+                                              .where((s) => s.classId == val)
+                                              .toList();
+                                        });
+                                      }
+                                      _checkLiveConflict();
+                                    },
                               validator: (val) => val == null ? 'Select class' : null,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: _selectedSectionId,
-                              decoration: const InputDecoration(
+                            child: DropdownButtonFormField<String?>(
+                              initialValue: safeSectionValue,
+                              decoration: InputDecoration(
                                 labelText: 'Section',
-                                prefixIcon: Icon(Icons.grid_view_rounded),
+                                prefixIcon: const Icon(Icons.grid_view_rounded),
+                                suffixIcon: _isLoadingSections
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: Padding(
+                                          padding: EdgeInsets.all(12),
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        ),
+                                      )
+                                    : null,
                               ),
                               items: [
-                                const DropdownMenuItem(value: null, child: Text('All Sections')),
-                                ..._filteredSections.map((s) {
-                                  return DropdownMenuItem(
+                                const DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text('All Sections'),
+                                ),
+                                ..._currentSections.map((s) {
+                                  return DropdownMenuItem<String?>(
                                     value: s.id,
                                     child: Text('Section ${s.name}'),
                                   );
@@ -482,60 +666,134 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Row 4: Subject
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: _subjectController,
-                              decoration: InputDecoration(
-                                labelText: 'Subject *',
-                                hintText: 'e.g. Mathematics',
-                                prefixIcon: const Icon(Icons.book_outlined),
-                                suffixIcon: widget.availableSubjects.isNotEmpty
-                                    ? PopupMenuButton<SubjectModel>(
-                                        icon: const Icon(Icons.arrow_drop_down_circle_outlined),
-                                        tooltip: 'Select from Subject Catalog',
-                                        onSelected: (sub) {
-                                          setState(() {
-                                            _subjectController.text = sub.name;
-                                            _selectedSubjectId = sub.id;
-                                          });
-                                          _checkLiveConflict();
-                                        },
-                                        itemBuilder: (ctx) {
-                                          return widget.availableSubjects.map((s) {
-                                            return PopupMenuItem(
-                                              value: s,
-                                              child: Text(s.name),
-                                            );
-                                          }).toList();
-                                        },
-                                      )
-                                    : null,
-                              ),
-                              onChanged: (_) => _checkLiveConflict(),
-                              validator: (val) =>
-                                  val == null || val.trim().isEmpty ? 'Subject is required' : null,
+                      // Row 4: Subject Selection
+                      if (widget.availableSubjects.isNotEmpty) ...[
+                        DropdownButtonFormField<String>(
+                          initialValue: safeSubjectValue,
+                          decoration: const InputDecoration(
+                            labelText: 'Subject *',
+                            prefixIcon: Icon(Icons.book_outlined),
+                          ),
+                          items: [
+                            ...widget.availableSubjects.map((s) {
+                              final codeStr =
+                                  (s.code != null && s.code!.isNotEmpty) ? ' (${s.code})' : '';
+                              return DropdownMenuItem<String>(
+                                value: s.id,
+                                child: Text('${s.name}$codeStr'),
+                              );
+                            }),
+                            const DropdownMenuItem<String>(
+                              value: '__custom__',
+                              child: Text('+ Other / Custom Subject...'),
                             ),
+                          ],
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == '__custom__') {
+                                _isCustomSubject = true;
+                                _selectedSubjectId = null;
+                              } else {
+                                _isCustomSubject = false;
+                                _selectedSubjectId = val;
+                                final sub = widget.availableSubjects
+                                    .where((s) => s.id == val)
+                                    .firstOrNull;
+                                if (sub != null) {
+                                  _subjectController.text = sub.name;
+                                }
+                              }
+                            });
+                            _checkLiveConflict();
+                          },
+                          validator: (val) {
+                            if (!_isCustomSubject && (val == null || val.isEmpty)) {
+                              return 'Please select a subject';
+                            }
+                            return null;
+                          },
+                        ),
+                        if (_isCustomSubject) ...[
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _subjectController,
+                            decoration: const InputDecoration(
+                              labelText: 'Custom Subject Name *',
+                              hintText: 'e.g. Robotics / Sanskrit',
+                              prefixIcon: Icon(Icons.edit_note_rounded),
+                            ),
+                            onChanged: (_) => _checkLiveConflict(),
+                            validator: (val) => val == null || val.trim().isEmpty
+                                ? 'Subject name is required'
+                                : null,
                           ),
                         ],
-                      ),
+                      ] else ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.softLavender.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppColors.midnightNavy.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline_rounded,
+                                  color: AppColors.midnightNavy, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Subject Catalog is empty. You can enter a subject name manually or configure subjects in the catalog.',
+                                  style: AppTypography.bodySmall,
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  context.push('/subject-catalog');
+                                },
+                                icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                label: const Text('Catalog'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextFormField(
+                          controller: _subjectController,
+                          decoration: const InputDecoration(
+                            labelText: 'Subject Name *',
+                            hintText: 'e.g. Mathematics',
+                            prefixIcon: Icon(Icons.book_outlined),
+                          ),
+                          onChanged: (_) => _checkLiveConflict(),
+                          validator: (val) =>
+                              val == null || val.trim().isEmpty ? 'Subject is required' : null,
+                        ),
+                      ],
                       const SizedBox(height: 14),
 
                       // Row 5: Teacher Assignment
-                      DropdownButtonFormField<String>(
-                        initialValue: _selectedTeacherId,
-                        decoration: const InputDecoration(
-                          labelText: 'Teacher',
-                          prefixIcon: Icon(Icons.badge_outlined),
+                      DropdownButtonFormField<String?>(
+                        initialValue: safeTeacherValue,
+                        decoration: InputDecoration(
+                          labelText: 'Assigned Teacher',
+                          prefixIcon: const Icon(Icons.badge_outlined),
+                          helperText: widget.availableTeachers.isEmpty
+                              ? 'No registered teachers found for this school'
+                              : null,
                         ),
                         items: [
-                          const DropdownMenuItem(value: null, child: Text('No Teacher Assigned')),
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('No Teacher Assigned'),
+                          ),
                           ...widget.availableTeachers.map((t) {
-                            return DropdownMenuItem(
+                            final sub =
+                                t.subjects.isNotEmpty ? ' (${t.subjects.first})' : '';
+                            return DropdownMenuItem<String?>(
                               value: t.id,
-                              child: Text(t.name),
+                              child: Text('${t.name}$sub'),
                             );
                           }),
                         ],
@@ -543,7 +801,8 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
                           setState(() {
                             _selectedTeacherId = val;
                             if (val != null) {
-                              final t = widget.availableTeachers.where((t) => t.id == val).firstOrNull;
+                              final t =
+                                  widget.availableTeachers.where((t) => t.id == val).firstOrNull;
                               _selectedTeacherName = t?.name;
                             } else {
                               _selectedTeacherName = null;
@@ -596,7 +855,7 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
                     ),
                     const SizedBox(width: 12),
                     FilledButton.icon(
-                      onPressed: _isSaving ? null : _submit,
+                      onPressed: (_isSaving || widget.availableClasses.isEmpty) ? null : _submit,
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.midnightNavy,
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -605,7 +864,10 @@ class _TimetablePeriodDialogState extends State<TimetablePeriodDialog> {
                           ? const SizedBox(
                               width: 16,
                               height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.pureWhite),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.pureWhite,
+                              ),
                             )
                           : const Icon(Icons.check_rounded, size: 18),
                       label: Text(isEditing ? 'Save Changes' : 'Create Period'),

@@ -34,7 +34,13 @@ class _SubjectCatalogScreenState extends ConsumerState<SubjectCatalogScreen> {
     });
 
     final profile = ref.read(authProvider);
-    final schoolId = profile?.schoolId?.trim() ?? '';
+    var schoolId = profile?.schoolId?.trim() ?? '';
+
+    if (schoolId.isEmpty) {
+      try {
+        schoolId = await ref.read(classSectionServiceProvider).fetchActiveSchoolId();
+      } catch (_) {}
+    }
 
     if (schoolId.isEmpty) {
       setState(() {
@@ -148,7 +154,12 @@ class _SubjectCatalogScreenState extends ConsumerState<SubjectCatalogScreen> {
               ElevatedButton(
                 onPressed: () async {
                   if (!formKey.currentState!.validate()) return;
-                  final schoolId = ref.read(authProvider)?.schoolId?.trim() ?? '';
+                  var schoolId = ref.read(authProvider)?.schoolId?.trim() ?? '';
+                  if (schoolId.isEmpty) {
+                    try {
+                      schoolId = await ref.read(classSectionServiceProvider).fetchActiveSchoolId();
+                    } catch (_) {}
+                  }
                   final service = ref.read(teacherServiceProvider);
 
                   try {
@@ -216,7 +227,12 @@ class _SubjectCatalogScreenState extends ConsumerState<SubjectCatalogScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.softCoral),
             onPressed: () async {
               Navigator.pop(ctx);
-              final schoolId = ref.read(authProvider)?.schoolId?.trim() ?? '';
+              var schoolId = ref.read(authProvider)?.schoolId?.trim() ?? '';
+              if (schoolId.isEmpty) {
+                try {
+                  schoolId = await ref.read(classSectionServiceProvider).fetchActiveSchoolId();
+                } catch (_) {}
+              }
               try {
                 await ref.read(teacherServiceProvider).deleteSubject(
                   id: subject.id,
@@ -251,10 +267,12 @@ class _SubjectCatalogScreenState extends ConsumerState<SubjectCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         leadingWidth: AppBackButton.leadingWidth,
-        leading: const AppBackButton(fallbackPath: '/settings'),
+        leading: const AppBackButton(fallbackPath: '/home'),
         title: Text('Subject Catalog', style: AppTypography.titleLarge),
         actions: [
           IconButton(
@@ -263,7 +281,10 @@ class _SubjectCatalogScreenState extends ConsumerState<SubjectCatalogScreen> {
             onPressed: _loadSubjects,
           ),
           IconButton(
-            icon: const Icon(Icons.add_rounded, color: AppColors.softLavender),
+            icon: Icon(
+              Icons.add_rounded,
+              color: isDark ? AppColors.pureWhite : AppColors.primaryAccent,
+            ),
             tooltip: 'Add Subject',
             onPressed: () => _showSubjectDialog(),
           ),
@@ -384,7 +405,10 @@ class _SubjectCatalogScreenState extends ConsumerState<SubjectCatalogScreen> {
                             ),
                             title: Text(
                               subject.name,
-                              style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w600),
+                              style: AppTypography.titleSmall.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? AppColors.pureWhite : AppColors.primaryText,
+                              ),
                             ),
                             subtitle: Row(
                               children: [

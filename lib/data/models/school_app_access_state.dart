@@ -26,6 +26,17 @@ enum AppAccessStatus {
   networkError,
 }
 
+/// The distinct category of tenant access restriction or failure.
+enum AppAccessFailureCategory {
+  none,
+  schoolNotFound,
+  profileOrMembershipMissing,
+  authorizationOrRlsDenied,
+  subscriptionOrEntitlementProblem,
+  networkOrConnectionFailure,
+  sessionExpired,
+}
+
 /// Comprehensive outcome of evaluating tenant identity, app configuration match,
 /// and subscription access standing.
 class AppAccessResult {
@@ -48,6 +59,7 @@ class AppAccessResult {
   });
 
   bool get isBlocked => !isAllowed;
+  bool get isChecking => status == AppAccessStatus.checking;
 
   bool get isSchoolDeactivated =>
       status == AppAccessStatus.schoolDeactivated ||
@@ -89,6 +101,58 @@ class AppAccessResult {
     return detailedReason ?? 'Please contact your administrator for assistance.';
   }
 
+  AppAccessFailureCategory get failureCategory {
+    if (isAllowed) return AppAccessFailureCategory.none;
+    switch (status) {
+      case AppAccessStatus.schoolNotFound:
+        return AppAccessFailureCategory.schoolNotFound;
+      case AppAccessStatus.noProfile:
+      case AppAccessStatus.noSchoolAssigned:
+        return AppAccessFailureCategory.profileOrMembershipMissing;
+      case AppAccessStatus.profileInactive:
+      case AppAccessStatus.schoolInactive:
+      case AppAccessStatus.schoolDeactivated:
+      case AppAccessStatus.appNotFound:
+      case AppAccessStatus.appMismatch:
+      case AppAccessStatus.appInactive:
+      case AppAccessStatus.appDeactivated:
+        return AppAccessFailureCategory.authorizationOrRlsDenied;
+      case AppAccessStatus.subscriptionExpired:
+      case AppAccessStatus.subscriptionSuspended:
+      case AppAccessStatus.subscriptionInactive:
+      case AppAccessStatus.noSubscription:
+      case AppAccessStatus.subscriptionMissing:
+      case AppAccessStatus.subscriptionNotStarted:
+        return AppAccessFailureCategory.subscriptionOrEntitlementProblem;
+      case AppAccessStatus.networkError:
+        return AppAccessFailureCategory.networkOrConnectionFailure;
+      case AppAccessStatus.unauthenticated:
+        return AppAccessFailureCategory.sessionExpired;
+      case AppAccessStatus.checking:
+      case AppAccessStatus.granted:
+        return AppAccessFailureCategory.none;
+    }
+  }
+
+  String get categoryBadgeLabel {
+    switch (failureCategory) {
+      case AppAccessFailureCategory.schoolNotFound:
+        return 'School Record Missing';
+      case AppAccessFailureCategory.profileOrMembershipMissing:
+        return 'Profile / Membership Missing';
+      case AppAccessFailureCategory.authorizationOrRlsDenied:
+        return 'Authorization / Access Denied';
+      case AppAccessFailureCategory.subscriptionOrEntitlementProblem:
+        return 'Subscription / Entitlement Issue';
+      case AppAccessFailureCategory.networkOrConnectionFailure:
+        return 'Connection Failure';
+      case AppAccessFailureCategory.sessionExpired:
+        return 'Session Expired';
+      case AppAccessFailureCategory.none:
+        return '';
+    }
+  }
+
   factory AppAccessResult.granted({
     required SchoolModel school,
     required SchoolManagementAppModel app,
@@ -99,6 +163,22 @@ class AppAccessResult {
       status: AppAccessStatus.granted,
       userMessage: 'Access Granted',
       detailedReason: 'Tenant school, dedicated app, and subscription standing verified.',
+      resolvedSchool: school,
+      resolvedApp: app,
+      resolvedSubscription: subscription,
+    );
+  }
+
+  factory AppAccessResult.allowed({
+    required SchoolModel school,
+    SchoolManagementAppModel? app,
+    SchoolAppSubscriptionModel? subscription,
+  }) {
+    return AppAccessResult(
+      isAllowed: true,
+      status: AppAccessStatus.granted,
+      userMessage: 'Access Granted',
+      detailedReason: 'Tenant school verified.',
       resolvedSchool: school,
       resolvedApp: app,
       resolvedSubscription: subscription,

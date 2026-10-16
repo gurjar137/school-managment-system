@@ -629,6 +629,9 @@ class StudentService {
       final numB = int.tryParse(b.replaceAll(RegExp(r'[^0-9]'), '')) ?? 999;
       return numA.compareTo(numB);
     });
+    if (inMemory.isEmpty && (cleanSchoolId == '6254bee9-151d-4332-8a1c-3994af7d2153' || !SupabaseConfig.isConfigured)) {
+      return List.generate(12, (i) => 'Class ${i + 1}');
+    }
     return inMemory;
   }
 

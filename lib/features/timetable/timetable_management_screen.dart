@@ -370,6 +370,23 @@ class _TimetableManagementScreenState extends ConsumerState<TimetableManagementS
       return;
     }
 
+    final csService = ref.read(classSectionServiceProvider);
+    if (_classes.isEmpty) {
+      try {
+        final fetched = await csService.fetchClasses(_resolvedSchoolId, _selectedYear!.id);
+        if (fetched.isNotEmpty && mounted) {
+          setState(() {
+            _classes = fetched;
+            _selectedClass = fetched.first;
+          });
+        }
+      } catch (e) {
+        debugPrint('[TimetableManagementScreen] fetchClasses error: $e');
+      }
+    }
+
+    if (!mounted) return;
+
     final timetableService = ref.read(timetableServiceProvider);
 
     final result = await showDialog<TimetableEntryModel>(
@@ -383,6 +400,7 @@ class _TimetableManagementScreenState extends ConsumerState<TimetableManagementS
         availableTeachers: _teachers,
         availableSubjects: _subjects,
         timetableService: timetableService,
+        classSectionService: csService,
         existingEntries: _entries,
         initialEntry: initial,
         preselectedClassId: _selectedClass?.id,
@@ -953,17 +971,29 @@ class _TimetableManagementScreenState extends ConsumerState<TimetableManagementS
           // Class Selector
           SizedBox(
             width: 150,
-            child: DropdownButtonFormField<SchoolClassModel>(
-              initialValue: _selectedClass,
+            child: DropdownButtonFormField<SchoolClassModel?>(
+              initialValue: _selectedClass != null && _classes.any((c) => c.id == _selectedClass!.id)
+                  ? _selectedClass
+                  : null,
               isDense: true,
               decoration: const InputDecoration(
                 labelText: 'Class',
                 contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               ),
-              items: _classes.map((c) {
-                return DropdownMenuItem(value: c, child: Text(c.name, style: AppTypography.bodySmall));
-              }).toList(),
-              onChanged: _onClassChanged,
+              items: _classes.isEmpty
+                  ? [
+                      const DropdownMenuItem<SchoolClassModel?>(
+                        value: null,
+                        child: Text('No Classes', style: TextStyle(fontSize: 12)),
+                      ),
+                    ]
+                  : _classes.map((c) {
+                      return DropdownMenuItem<SchoolClassModel?>(
+                        value: c,
+                        child: Text(c.name, style: AppTypography.bodySmall),
+                      );
+                    }).toList(),
+              onChanged: _classes.isEmpty ? null : (c) => _onClassChanged(c),
             ),
           ),
 
@@ -1166,6 +1196,49 @@ class _TimetableManagementScreenState extends ConsumerState<TimetableManagementS
   }
 
   Widget _buildEmptyState(bool isDark) {
+    if (_classes.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: AppColors.softCoral.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.meeting_room_outlined, size: 48, color: AppColors.softCoral),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'No classes configured for this session',
+                style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Classes and sections must be added before you can schedule periods or build timetables.',
+                style: AppTypography.bodyMedium.copyWith(color: AppColors.coolGray),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: () => context.push('/classes'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.midnightNavy,
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add Classes & Sections', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),

@@ -47,6 +47,7 @@ import '../../features/meetings/meetings_screen.dart';
 import '../../features/leave_requests/leave_requests_screen.dart';
 import '../../features/library/library_screen.dart';
 import '../../features/transport/transport_screen.dart';
+import '../../features/inventory/inventory_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/subjects/subject_catalog_screen.dart';
@@ -267,6 +268,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
+            path: '/inventory',
+            pageBuilder: (context, state) => const NoTransitionPage(child: InventoryScreen()),
+          ),
+          GoRoute(
             path: '/more',
             pageBuilder: (context, state) => const NoTransitionPage(child: MoreScreen()),
           ),
@@ -344,6 +349,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SubjectCatalogScreen(),
       ),
       GoRoute(
+        path: '/subject-catalog',
+        builder: (context, state) => const SubjectCatalogScreen(),
+      ),
+      GoRoute(
         path: '/parents',
         builder: (context, state) => const ParentsListScreen(),
       ),
@@ -394,7 +403,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/class-sections/:classId',
         builder: (context, state) {
           final targetClass = state.extra as SchoolClassModel?;
-          return ClassSectionsScreen(targetClass: targetClass);
+          final classId = state.pathParameters['classId'];
+          return ClassSectionsScreen(targetClass: targetClass, classId: classId);
         },
       ),
       GoRoute(

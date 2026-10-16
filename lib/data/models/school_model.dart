@@ -55,4 +55,22 @@ class SchoolModel {
       createdAt: createdAt,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'code': schoolCode,
+      'school_code': schoolCode,
+      'name': name,
+      'address': address,
+      'phone': phone,
+      'email': email,
+      'logo_url': logoUrl,
+      'app_name': appName,
+      'primary_color': primaryColor,
+      'secondary_color': secondaryColor,
+      'status': status.name,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
 }

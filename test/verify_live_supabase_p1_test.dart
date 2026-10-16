@@ -136,7 +136,7 @@ void main() {
         designation: "Senior Mathematics Teacher",
       );
 
-      const struct = SalaryStructure(
+      final struct = SalaryStructure(
         basicSalary: 32000,
         allowances: [
           SalaryAllowance(type: "HRA", amount: 4500),
@@ -150,8 +150,8 @@ void main() {
       await salaryService.updateSalaryStructure("t1", struct);
 
       final retrieved = await salaryService.getSalaryStructure("t1");
-      expect(retrieved.basicSalary, equals(32000));
-      expect(retrieved.netSalary, equals(36000));
+      expect(retrieved?.basicSalary, equals(32000));
+      expect(retrieved?.netSalary, equals(36000));
 
       final slip = await salaryService.recordSalaryPayment(
         teacher: teacher,

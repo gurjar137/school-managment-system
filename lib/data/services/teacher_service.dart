@@ -6,6 +6,7 @@ import '../models/academic_models.dart';
 import '../models/user_model.dart';
 import '../models/staff_model.dart';
 import '../../core/config/supabase_config.dart';
+import '../../core/errors/exceptions.dart';
 import 'tenant_resolver.dart';
 
 class TeacherService {
@@ -66,6 +67,21 @@ class TeacherService {
     } catch (e) {
       debugPrint('[TeacherService Cache Restore Warning]: $e');
     }
+  }
+
+  /// Clears tenant-partitioned teacher cache upon logout or tenant switch.
+  static Future<void> clearCache([String? schoolId]) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (schoolId != null && schoolId.isNotEmpty) {
+        await prefs.remove('cached_teachers_directory_${schoolId.trim()}');
+      } else {
+        final keys = prefs.getKeys().where((k) => k.startsWith('cached_teachers_directory_')).toList();
+        for (final k in keys) {
+          await prefs.remove(k);
+        }
+      }
+    } catch (_) {}
   }
 
   static const String kpsSchoolId = '6254bee9-151d-4332-8a1c-3994af7d2153';
@@ -518,18 +534,33 @@ class TeacherService {
     await Future.delayed(const Duration(milliseconds: 100));
 
     final List<TeacherModel> list = [];
-    final String effectiveSchoolId;
-    if (SupabaseConfig.isConfigured) {
-      effectiveSchoolId = await TenantResolver.resolveActiveSchoolId(
-        client: _client,
-        requestedSchoolId: schoolId,
-      );
-    } else {
-      effectiveSchoolId = (schoolId != null && schoolId.trim().isNotEmpty)
-          ? schoolId.trim()
-          : 'offline_mock_school';
+    String effectiveSchoolId = (schoolId != null && schoolId.trim().isNotEmpty) ? schoolId.trim() : '';
+    if (SupabaseConfig.isConfigured && _client != null && _client!.auth.currentUser != null) {
+      try {
+        effectiveSchoolId = await TenantResolver.resolveActiveSchoolId(
+          client: _client,
+          requestedSchoolId: schoolId,
+        );
+      } catch (e) {
+        if (e is UnauthorizedTenantAccessException) rethrow;
+        if (effectiveSchoolId.isEmpty) rethrow;
+      }
+    } else if (effectiveSchoolId.isEmpty) {
+      if (SupabaseConfig.isConfigured && _client != null) {
+        try {
+          effectiveSchoolId = await TenantResolver.resolveActiveSchoolId(
+            client: _client,
+            requestedSchoolId: schoolId,
+          );
+        } catch (_) {
+          effectiveSchoolId = '';
+        }
+      } else {
+        effectiveSchoolId = 'offline_mock_school';
+      }
     }
 
+    bool remoteFailed = false;
     if (_client != null && SupabaseConfig.isConfigured && effectiveSchoolId.isNotEmpty) {
       try {
         final profileRes = await _client!
@@ -537,68 +568,30 @@ class TeacherService {
             .select()
             .eq('school_id', effectiveSchoolId)
             .order('created_at', ascending: true);
-        if (profileRes.isNotEmpty) {
-          for (final p in profileRes) {
-            final roleStr = (p['role']?.toString() ?? '').toLowerCase();
-            if (includeStaff || roleStr.contains('teacher') || roleStr.contains('faculty')) {
-              list.add(_mapSupabaseToTeacherModel(p, defaultSchoolId: effectiveSchoolId));
-            }
+        for (final p in profileRes) {
+          final roleStr = (p['role']?.toString() ?? '').toLowerCase();
+          if (includeStaff || roleStr.contains('teacher') || roleStr.contains('faculty')) {
+            list.add(_mapSupabaseToTeacherModel(p, defaultSchoolId: effectiveSchoolId));
           }
         }
       } catch (e) {
+        remoteFailed = true;
         debugPrint('[TeacherService Profiles query warning]: $e');
       }
-
-      // If current authenticated user belongs to this school, guarantee presence
-      final curUser = _client?.auth.currentUser;
-      if (curUser != null) {
-        final meta = curUser.userMetadata ?? {};
-        final userSchoolId = (meta['school_id'] as String?)?.trim();
-        final userRole = (meta['role'] as String?)?.trim().toLowerCase() ?? '';
-        final isMatch = userSchoolId == effectiveSchoolId &&
-            (includeStaff || userRole.contains('teacher') || userRole.contains('faculty'));
-        if (isMatch) {
-          final alreadyIncluded = list.any((t) =>
-              t.authUserId == curUser.id ||
-              (curUser.email != null && t.email.toLowerCase() == curUser.email!.toLowerCase()));
-          if (!alreadyIncluded) {
-            final dynamicClass = meta['assigned_class'] ?? meta['class'] ?? '';
-            final dynamicSection = meta['assigned_section'] ?? meta['section'] ?? '';
-            UserRole userRoleEnum = UserRole.teacher;
-            if (userRole.contains('admin') || userRole.contains('principal') || userRole.contains('owner')) {
-              userRoleEnum = UserRole.schoolAdmin;
-            } else if (userRole.contains('staff') || userRole.contains('clerk') || userRole.contains('accountant')) {
-              userRoleEnum = UserRole.staff;
-            }
-
-            list.add(TeacherModel(
-              id: curUser.id,
-              schoolId: effectiveSchoolId,
-              employeeId: meta['employee_id']?.toString() ?? 'EMP-${curUser.id.length >= 4 ? curUser.id.substring(0, 4).toUpperCase() : "0000"}',
-              name: meta['full_name']?.toString() ?? curUser.email?.split('@').first ?? (userRoleEnum.isAdministrator ? 'School Admin' : 'Teacher'),
-              email: curUser.email ?? '',
-              subjects: meta['subjects'] is List ? List<String>.from(meta['subjects']) : (meta['subject'] != null ? [meta['subject'].toString()] : const []),
-              assignedClass: dynamicClass.toString(),
-              assignedSection: dynamicSection.toString(),
-              totalStudents: 0,
-              avatarUrl: '',
-              phone: meta['phone']?.toString() ?? '',
-              designation: meta['designation']?.toString() ?? (userRoleEnum.isAdministrator ? 'School Administrator' : 'Teacher'),
-              status: AccountStatus.active,
-              authUserId: curUser.id,
-              role: userRoleEnum,
-            ));
-          }
-        }
-      }
     } else {
-      // Offline / unconfigured mock mode ONLY
+      remoteFailed = true;
+    }
+
+    // Fallback to cache ONLY on genuine remote failure or pure unconfigured offline mode
+    if (remoteFailed && list.isEmpty) {
       await _restoreTeachersCache(effectiveSchoolId);
       if (_teachers.isNotEmpty) {
         list.addAll(_teachers.where((t) => effectiveSchoolId.isEmpty || t.schoolId == effectiveSchoolId));
-      }
-      if (list.isEmpty && (effectiveSchoolId.isEmpty || effectiveSchoolId == kpsSchoolId)) {
-        list.addAll(_kpsBaselineTeachers);
+      } else if (_client == null || !SupabaseConfig.isConfigured) {
+        // Pure unconfigured mock mode or uninitialized unit test mode ONLY
+        if (effectiveSchoolId.isEmpty || effectiveSchoolId == kpsSchoolId) {
+          list.addAll(_kpsBaselineTeachers);
+        }
       }
     }
 
@@ -749,22 +742,44 @@ class TeacherService {
 
     // 2. Real Supabase insert into profiles table if authUserId is present
     if (_client != null && SupabaseConfig.isConfigured && teacher.authUserId != null && teacher.authUserId!.isNotEmpty) {
+      bool persistedToDb = false;
       try {
-        await _client!.rpc('create_staff_profile', params: {
+        final rpcRes = await _client!.rpc('create_staff_profile', params: {
           'p_auth_user_id': teacher.authUserId,
           'p_school_id': teacher.schoolId,
           'p_full_name': teacher.name,
-          'p_role': 'teacher',
+          'p_role': teacher.isTeacher ? 'teacher' : 'staff',
+          'p_employee_id': teacher.employeeId,
+          'p_designation': teacher.designation,
+          'p_assigned_class': teacher.assignedClass.isNotEmpty ? teacher.assignedClass : null,
+          'p_assigned_section': teacher.assignedSection.isNotEmpty ? teacher.assignedSection : null,
+          'p_phone': teacher.phone.isNotEmpty ? teacher.phone : null,
+          'p_email': teacher.email.isNotEmpty ? teacher.email : null,
+          'p_subject': teacher.subjects.isNotEmpty ? teacher.subjects.first : null,
         });
-      } catch (_) {
+        if (rpcRes != null) persistedToDb = true;
+      } catch (rpcErr) {
+        debugPrint('[TeacherService create_staff_profile RPC notice]: $rpcErr');
+      }
+
+      if (!persistedToDb) {
         try {
           await _client!.from('profiles').upsert({
             'auth_user_id': teacher.authUserId,
             'school_id': teacher.schoolId,
             'full_name': teacher.name,
-            'role': 'teacher',
+            'role': teacher.isTeacher ? 'teacher' : 'staff',
             'status': 'active',
+            'employee_id': teacher.employeeId,
+            'designation': teacher.designation,
+            'assigned_class': teacher.assignedClass.isNotEmpty ? teacher.assignedClass : null,
+            'assigned_section': teacher.assignedSection.isNotEmpty ? teacher.assignedSection : null,
+            'phone': teacher.phone.isNotEmpty ? teacher.phone : null,
+            'email': teacher.email.isNotEmpty ? teacher.email : null,
+            'subject': teacher.subjects.isNotEmpty ? teacher.subjects.first : null,
+            'updated_at': DateTime.now().toIso8601String(),
           }, onConflict: 'auth_user_id');
+          persistedToDb = true;
         } catch (pErr) {
           debugPrint('[TeacherService profiles upsert warning]: $pErr');
         }
@@ -1008,11 +1023,29 @@ class TeacherService {
     String? code,
     String? type,
   }) async {
+    final cleanSchoolId = schoolId.trim();
+    if (cleanSchoolId.isEmpty) {
+      throw const TenantResolutionException('Cannot create subject without a valid school ID.');
+    }
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      throw Exception('Subject name cannot be empty.');
+    }
     final effectiveType = (type != null && type.isNotEmpty) ? type.trim().toUpperCase() : 'THEORY';
     if (_client != null && SupabaseConfig.isConfigured) {
+      final existing = await _client!
+          .from('subjects')
+          .select('id')
+          .eq('school_id', schoolId)
+          .ilike('name', cleanName)
+          .limit(1);
+      if (existing.isNotEmpty) {
+        throw Exception('Subject "$cleanName" already exists for this school.');
+      }
+
       final res = await _client!.from('subjects').insert({
         'school_id': schoolId,
-        'name': name.trim(),
+        'name': cleanName,
         'code': code?.trim().toUpperCase(),
         'type': effectiveType,
       }).select().single();
@@ -1025,15 +1058,15 @@ class TeacherService {
       );
     }
 
-    final exists = _mockSubjects.any((s) => s.schoolId == schoolId && s.name.toLowerCase() == name.trim().toLowerCase());
+    final exists = _mockSubjects.any((s) => s.schoolId == schoolId && s.name.toLowerCase() == cleanName.toLowerCase());
     if (exists) {
-      throw Exception('Subject "$name" already exists.');
+      throw Exception('Subject "$cleanName" already exists for this school.');
     }
 
     final newSub = SubjectModel(
       id: 'sub_${DateTime.now().millisecondsSinceEpoch}',
       schoolId: schoolId,
-      name: name.trim(),
+      name: cleanName,
       code: code?.trim().toUpperCase(),
       type: effectiveType,
     );
@@ -1048,26 +1081,46 @@ class TeacherService {
     String? code,
     String? type,
   }) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      throw Exception('Subject name cannot be empty.');
+    }
     final effectiveType = (type != null && type.isNotEmpty) ? type.trim().toUpperCase() : 'THEORY';
     if (_client != null && SupabaseConfig.isConfigured) {
+      final existing = await _client!
+          .from('subjects')
+          .select('id')
+          .eq('school_id', schoolId)
+          .neq('id', id)
+          .ilike('name', cleanName)
+          .limit(1);
+      if (existing.isNotEmpty) {
+        throw Exception('Another subject with name "$cleanName" already exists for this school.');
+      }
+
       final res = await _client!.from('subjects').update({
-        'name': name.trim(),
+        'name': cleanName,
         'code': code?.trim().toUpperCase(),
         'type': effectiveType,
       }).eq('id', id).eq('school_id', schoolId).select().single();
       return SubjectModel(
         id: res['id']?.toString() ?? id,
         schoolId: res['school_id']?.toString() ?? schoolId,
-        name: res['name']?.toString() ?? name,
+        name: res['name']?.toString() ?? cleanName,
         code: res['code']?.toString() ?? code,
         type: res['type']?.toString() ?? effectiveType,
       );
     }
 
+    final duplicate = _mockSubjects.any((s) => s.schoolId == schoolId && s.id != id && s.name.toLowerCase() == cleanName.toLowerCase());
+    if (duplicate) {
+      throw Exception('Another subject with name "$cleanName" already exists for this school.');
+    }
+
     final idx = _mockSubjects.indexWhere((s) => s.id == id);
     if (idx != -1) {
       _mockSubjects[idx] = _mockSubjects[idx].copyWith(
-        name: name.trim(),
+        name: cleanName,
         code: code?.trim().toUpperCase(),
         type: effectiveType,
       );
@@ -1084,7 +1137,20 @@ class TeacherService {
       try {
         final examCheck = await _client!.from('exam_subjects').select('id').eq('subject_id', id).limit(1);
         if (examCheck.isNotEmpty) {
-          throw Exception('Cannot delete subject: It is referenced by examinations.');
+          throw Exception('Cannot delete subject: It is referenced by active examinations.');
+        }
+      } catch (e) {
+        if (e is Exception && e.toString().contains('Cannot delete')) rethrow;
+      }
+
+      try {
+        final subRow = await _client!.from('subjects').select('name').eq('id', id).maybeSingle();
+        final subName = subRow?['name']?.toString() ?? '';
+        if (subName.isNotEmpty) {
+          final ttCheck = await _client!.from('timetable_entries').select('id').eq('school_id', schoolId).eq('subject_name', subName).limit(1);
+          if (ttCheck.isNotEmpty) {
+            throw Exception('Cannot delete subject "$subName": It is referenced by active timetable periods.');
+          }
         }
       } catch (e) {
         if (e is Exception && e.toString().contains('Cannot delete')) rethrow;

@@ -13,6 +13,7 @@ import '../services/transport_service.dart';
 import '../services/access_service.dart';
 import '../mock/mock_data.dart';
 import '../../core/utils/teacher_assignment_parser.dart';
+import '../../core/utils/uuid_helper.dart';
 
 class SchoolRepository {
   final StudentService _studentService;
@@ -284,27 +285,32 @@ class SchoolRepository {
   }
 
   Future<void> addHomework(HomeworkModel item, {String? schoolId, String? academicYearId}) async {
-    _homework.insert(0, item);
     final client = _client;
     if (client != null && SupabaseConfig.isConfigured) {
-      try {
-        final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
-            ? schoolId
-            : await _studentService.fetchActiveSchoolId();
-        final effectiveAyId = (academicYearId != null && academicYearId.isNotEmpty)
-            ? academicYearId
-            : await _studentService.fetchActiveAcademicYearId(effectiveSchoolId);
-        final currentUserId = client.auth.currentUser?.id;
+      final effectiveSchoolId = (schoolId != null && schoolId.isNotEmpty)
+          ? schoolId
+          : await _studentService.fetchActiveSchoolId();
+      final effectiveAyId = (academicYearId != null && academicYearId.isNotEmpty)
+          ? academicYearId
+          : await _studentService.fetchActiveAcademicYearId(effectiveSchoolId);
+      final currentUserId = client.auth.currentUser?.id;
 
-        await client.from('homework').insert(item.toJson(
-          schoolId: effectiveSchoolId,
-          academicYearId: effectiveAyId,
-          createdBy: currentUserId,
-        ));
-      } catch (e) {
-        debugPrint('[SchoolRepository addHomework Warning]: $e');
+      final payload = item.toJson(
+        schoolId: effectiveSchoolId,
+        academicYearId: effectiveAyId,
+        createdBy: currentUserId,
+      );
+
+      final inserted = await client.from('homework').insert(payload).select().maybeSingle();
+      if (inserted != null) {
+        final persisted = HomeworkModel.fromJson(inserted);
+        _homework.removeWhere((h) => h.id == item.id || h.id == persisted.id);
+        _homework.insert(0, persisted);
+        return;
       }
     }
+    _homework.removeWhere((h) => h.id == item.id);
+    _homework.insert(0, item);
   }
 
   Future<List<ExamModel>> getExams() async {
@@ -406,18 +412,16 @@ class SchoolRepository {
             .eq('school_id', effectiveSchoolId)
             .order('created_at', ascending: false);
 
-        if (res is List) {
-          final dbList = res.map((row) => NoticeModel.fromJson(row)).toList();
-          for (final item in dbList) {
-            final idx = _notices.indexWhere((n) => n.id == item.id);
-            if (idx != -1) {
-              _notices[idx] = item;
-            } else {
-              _notices.add(item);
-            }
+        final dbList = res.map((row) => NoticeModel.fromJson(row)).toList();
+        for (final item in dbList) {
+          final idx = _notices.indexWhere((n) => n.id == item.id);
+          if (idx != -1) {
+            _notices[idx] = item;
+          } else {
+            _notices.add(item);
           }
-          await _persistNotices(effectiveSchoolId);
         }
+        await _persistNotices(effectiveSchoolId);
       } catch (e) {
         debugPrint('[SchoolRepository getNotices Warning]: $e');
       }
@@ -434,8 +438,6 @@ class SchoolRepository {
           category: 'Sports',
           date: now.subtract(const Duration(days: 1)),
           author: 'Principal Office',
-          targetAudience: 'All Staff',
-          status: 'Published',
           isPinned: true,
           isUnread: false,
         ),
@@ -447,8 +449,6 @@ class SchoolRepository {
           category: 'Academic',
           date: now.subtract(const Duration(days: 3)),
           author: 'Examination Cell',
-          targetAudience: 'All Staff',
-          status: 'Published',
           isPinned: true,
           isUnread: false,
         ),
@@ -460,13 +460,10 @@ class SchoolRepository {
           category: 'General',
           date: now.subtract(const Duration(days: 5)),
           author: 'Administration',
-          targetAudience: 'Everyone',
-          status: 'Published',
           isPinned: false,
           isUnread: false,
         ),
       ]);
-      await _persistNotices(effectiveSchoolId);
     }
 
     // Role-based Audience and Status filtering
@@ -476,12 +473,13 @@ class SchoolRepository {
         return false;
       }
       // Drafts: only admins see drafts
-      if (n.status == 'Draft' && !includeDrafts && userRole != UserRole.schoolAdmin && userRole != UserRole.superAdmin) {
+      if (n.status.toLowerCase() == 'draft' && !includeDrafts && userRole != UserRole.schoolAdmin && userRole != UserRole.superAdmin) {
         return false;
       }
       // Audience scoping: teachers only see All Staff, Teachers Only, or Everyone
       if (userRole == UserRole.teacher) {
-        if (n.targetAudience == 'Admin Only') return false;
+        final aud = n.targetAudience.toLowerCase().trim();
+        if (aud == 'admin only' || aud == 'admin' || aud == 'parents' || aud == 'students') return false;
       }
       return true;
     }).toList();
@@ -492,7 +490,15 @@ class SchoolRepository {
         ? schoolId
         : await _studentService.fetchActiveSchoolId();
 
-    final enriched = item.copyWith(schoolId: effectiveSchoolId);
+    final canonicalNoticeId = item.id.isNotEmpty
+        ? item.id
+        : UuidHelper.generate();
+
+    final enriched = item.copyWith(
+      id: canonicalNoticeId,
+      schoolId: effectiveSchoolId,
+    );
+
     final existingIdx = _notices.indexWhere((n) => n.id == enriched.id);
     if (existingIdx != -1) {
       _notices[existingIdx] = enriched;
@@ -502,20 +508,26 @@ class SchoolRepository {
     await _persistNotices(effectiveSchoolId);
 
     // If published, trigger in-app notification for the target audience!
-    if (enriched.status == 'Published') {
-      final notif = NotificationModel(
-        id: 'notif_notice_${DateTime.now().millisecondsSinceEpoch}',
-        schoolId: effectiveSchoolId,
-        recipientRole: enriched.targetAudience,
-        title: 'New Notice: ${enriched.title}',
-        message: enriched.content.length > 90 ? '${enriched.content.substring(0, 90)}...' : enriched.content,
-        timestamp: DateTime.now(),
-        category: 'Notices',
-        isUnread: true,
-        relatedRecordId: enriched.id,
-        relatedRecordType: 'notice',
+    if (enriched.status.toLowerCase() == 'published') {
+      final notifId = UuidHelper.generate();
+      final existingNotifIdx = _notifications.indexWhere(
+        (notif) => notif.relatedRecordId == enriched.id,
       );
-      await addNotification(notif);
+      if (existingNotifIdx == -1) {
+        final notif = NotificationModel(
+          id: notifId,
+          schoolId: effectiveSchoolId,
+          recipientRole: enriched.targetAudience,
+          title: 'New Notice: ${enriched.title}',
+          message: enriched.content.length > 90 ? '${enriched.content.substring(0, 90)}...' : enriched.content,
+          timestamp: enriched.date,
+          category: 'Notices',
+          isUnread: true,
+          relatedRecordId: enriched.id,
+          relatedRecordType: 'notice',
+        );
+        await addNotification(notif);
+      }
 
       _accessService.logActivity(
         'Published School Notice',
@@ -533,11 +545,16 @@ class SchoolRepository {
             : await _studentService.fetchActiveAcademicYearId(effectiveSchoolId);
         final currentUserId = client.auth.currentUser?.id;
 
-        await client.from('notices').insert(enriched.toJson(
+        final payload = enriched.toJson(
           schoolId: effectiveSchoolId,
-          academicYearId: effectiveAyId,
+          academicYearId: (effectiveAyId != null && effectiveAyId.isNotEmpty && UuidHelper.isValidUuid(effectiveAyId)) ? effectiveAyId : null,
           createdBy: currentUserId,
-        ));
+        );
+        if (!UuidHelper.isValidUuid(enriched.id)) {
+          payload.remove('id');
+        }
+
+        await client.from('notices').insert(payload);
       } catch (e) {
         debugPrint('[SchoolRepository addNotice Supabase Sync Warning]: $e');
       }
@@ -550,6 +567,29 @@ class SchoolRepository {
       _notices[idx] = item;
       await _persistNotices(schoolId ?? item.schoolId);
     }
+
+    // If notice was updated to Published, ensure notification is dispatched to audience
+    if (item.status.toLowerCase() == 'published') {
+      final existingNotifIdx = _notifications.indexWhere(
+        (notif) => notif.relatedRecordId == item.id,
+      );
+      if (existingNotifIdx == -1) {
+        final notif = NotificationModel(
+          id: UuidHelper.generate(),
+          schoolId: item.schoolId.isNotEmpty ? item.schoolId : (schoolId ?? ''),
+          recipientRole: item.targetAudience,
+          title: 'Notice: ${item.title}',
+          message: item.content.length > 90 ? '${item.content.substring(0, 90)}...' : item.content,
+          timestamp: item.date,
+          category: 'Notices',
+          isUnread: true,
+          relatedRecordId: item.id,
+          relatedRecordType: 'notice',
+        );
+        await addNotification(notif);
+      }
+    }
+
     final client = _client;
     if (client != null && SupabaseConfig.isConfigured) {
       try {
@@ -570,12 +610,22 @@ class SchoolRepository {
   Future<void> deleteNotice(String id, {String? schoolId}) async {
     _notices.removeWhere((n) => n.id == id);
     await _persistNotices(schoolId);
+
+    // Clean up notifications linked to this notice
+    _notifications.removeWhere((n) => n.relatedRecordId == id || n.id == id);
+    await _persistNotifications(schoolId);
+
     final client = _client;
     if (client != null && SupabaseConfig.isConfigured) {
       try {
         await client.from('notices').delete().eq('id', id);
       } catch (e) {
         debugPrint('[SchoolRepository deleteNotice Warning]: $e');
+      }
+      try {
+        await client.from('notifications').delete().eq('related_record_id', id);
+      } catch (e) {
+        debugPrint('[SchoolRepository deleteNotice notification cleanup Warning]: $e');
       }
     }
   }
@@ -684,96 +734,82 @@ class SchoolRepository {
           query.eq('school_id', schoolId);
         }
         final res = await query.order('created_at', ascending: false).limit(50);
-        if (res is List) {
-          final dbList = res.map((row) => NotificationModel.fromJson(row)).toList();
-          for (final item in dbList) {
-            final idx = _notifications.indexWhere((n) => n.id == item.id);
-            if (idx != -1) {
-              _notifications[idx] = item;
-            } else {
-              _notifications.add(item);
-            }
+        final dbList = res.map((row) => NotificationModel.fromJson(row)).toList();
+        for (final item in dbList) {
+          final idx = _notifications.indexWhere((n) => n.id == item.id);
+          if (idx != -1) {
+            _notifications[idx] = item;
+          } else {
+            _notifications.add(item);
           }
-          await _persistNotifications(schoolId);
         }
+        await _persistNotifications(schoolId);
       } catch (e) {
         debugPrint('[SchoolRepository getNotifications Warning]: $e');
       }
     }
 
-    if (_notifications.isEmpty) {
-      final now = DateTime.now();
-      _notifications.addAll([
-        NotificationModel(
-          id: 'notif_1',
-          schoolId: schoolId ?? '',
-          title: 'Quarterly Fee Due Reminder',
-          message: 'First quarter tuition fee installment for 2026-2027 is due next week. Please clear pending dues.',
-          timestamp: now.subtract(const Duration(hours: 2)),
-          category: 'Fees',
-          isUnread: true,
-        ),
-        NotificationModel(
-          id: 'notif_2',
-          schoolId: schoolId ?? '',
-          title: 'Term Examination Schedule Published',
-          message: 'The comprehensive datesheet for upcoming term-end assessments is now available on the portal.',
-          timestamp: now.subtract(const Duration(days: 1)),
-          category: 'Academic',
-          isUnread: true,
-          relatedRecordId: 'notice_2',
-          relatedRecordType: 'notice',
-        ),
-        NotificationModel(
-          id: 'notif_3',
-          schoolId: schoolId ?? '',
-          title: 'Annual Sports Day Registration Open',
-          message: 'Sign up for athletic and indoor sports competitions with your assigned physical education teacher.',
-          timestamp: now.subtract(const Duration(days: 2)),
-          category: 'Notices',
-          isUnread: false,
-          relatedRecordId: 'notice_1',
-          relatedRecordType: 'notice',
-        ),
-        NotificationModel(
-          id: 'notif_4',
-          schoolId: schoolId ?? '',
-          title: 'Parent-Teacher Meeting This Saturday',
-          message: 'All parents and guardians are requested to attend the upcoming PTM session between 9 AM and 1 PM.',
-          timestamp: now.subtract(const Duration(days: 3)),
-          category: 'Meetings',
-          isUnread: false,
-          relatedRecordId: 'notice_3',
-          relatedRecordType: 'meeting',
-        ),
-      ]);
-      await _persistNotifications(schoolId);
-    }
-
     return _notifications.where((n) {
+      // School Isolation
       if (schoolId != null && schoolId.isNotEmpty && n.schoolId.isNotEmpty && n.schoolId != schoolId) {
         return false;
       }
+      // User ID Scoping
       if (userId != null && n.recipientId != null && n.recipientId!.isNotEmpty && n.recipientId != userId) {
         return false;
+      }
+      // Role & Audience Scoping
+      if (role != null && n.recipientRole != null && n.recipientRole!.trim().isNotEmpty) {
+        final targetAudience = n.recipientRole!.trim().toLowerCase();
+        if (targetAudience == 'everyone' || targetAudience == 'all') {
+          return true;
+        } else if (targetAudience == 'all staff' || targetAudience == 'staff') {
+          if (role != UserRole.teacher && role != UserRole.staff && role != UserRole.schoolAdmin && role != UserRole.superAdmin && role != UserRole.owner) {
+            return false;
+          }
+        } else if (targetAudience == 'teachers only' || targetAudience == 'teachers' || targetAudience == 'teacher') {
+          if (role != UserRole.teacher && role != UserRole.schoolAdmin && role != UserRole.superAdmin && role != UserRole.owner) {
+            return false;
+          }
+        } else if (targetAudience == 'parents' || targetAudience == 'parent') {
+          // If staff/admin, they can monitor parent notifications
+          if (role == UserRole.teacher) {
+            return false;
+          }
+        } else if (targetAudience == 'students' || targetAudience == 'student') {
+          // If teacher, they can view student notifications; staff/admin can monitor
+        } else if (targetAudience == 'admin only' || targetAudience == 'admin') {
+          if (role != UserRole.schoolAdmin && role != UserRole.superAdmin && role != UserRole.owner) {
+            return false;
+          }
+        }
       }
       return true;
     }).toList();
   }
 
   Future<void> addNotification(NotificationModel item) async {
-    final existingIdx = _notifications.indexWhere((n) => n.id == item.id);
+    final canonicalId = item.id.isNotEmpty
+        ? item.id
+        : UuidHelper.generate();
+    final enriched = item.copyWith(id: canonicalId);
+
+    final existingIdx = _notifications.indexWhere((n) => n.id == enriched.id);
     if (existingIdx != -1) {
-      _notifications[existingIdx] = item;
+      _notifications[existingIdx] = enriched;
     } else {
-      _notifications.insert(0, item);
+      _notifications.insert(0, enriched);
     }
-    await _persistNotifications(item.schoolId);
+    await _persistNotifications(enriched.schoolId);
 
     final client = _client;
     if (client != null && SupabaseConfig.isConfigured) {
       try {
-        await client.from('notifications').insert(item.toJson());
+        final payload = enriched.toJson();
+        if (!UuidHelper.isValidUuid(enriched.id)) {
+          payload.remove('id');
+        }
+        await client.from('notifications').insert(payload);
       } catch (e) {
         debugPrint('[SchoolRepository addNotification Warning]: $e');
       }

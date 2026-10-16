@@ -104,20 +104,38 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
       final ays = await ref.read(academicYearServiceProvider).fetchAcademicYears(schoolId);
       if (mounted) {
         final activeYears = ays.where((y) => y.status == AccountStatus.active || y.isCurrent).toList();
-        setState(() {
-          _availableAcademicYears = ays;
-          _isLoadingAcademicYears = false;
-          if (activeYears.isNotEmpty) {
+        if (activeYears.isNotEmpty) {
+          setState(() {
+            _availableAcademicYears = ays;
+            _isLoadingAcademicYears = false;
             _selectedAcademicYearId = activeYears.first.id;
             _hasNoActiveAcademicYear = false;
-          } else if (ays.isNotEmpty) {
+          });
+        } else if (ays.isNotEmpty) {
+          setState(() {
+            _availableAcademicYears = ays;
+            _isLoadingAcademicYears = false;
             _selectedAcademicYearId = ays.first.id;
             _hasNoActiveAcademicYear = false;
-          } else {
-            _selectedAcademicYearId = null;
-            _hasNoActiveAcademicYear = true;
-          }
-        });
+          });
+        } else {
+          // Attempt fallback resolution for active academic year
+          String? fallbackAyId;
+          try {
+            fallbackAyId = await ref.read(studentServiceProvider).fetchActiveAcademicYearId(schoolId);
+          } catch (_) {}
+          setState(() {
+            _availableAcademicYears = ays;
+            _isLoadingAcademicYears = false;
+            if (fallbackAyId != null && fallbackAyId.isNotEmpty) {
+              _selectedAcademicYearId = fallbackAyId;
+              _hasNoActiveAcademicYear = false;
+            } else {
+              _selectedAcademicYearId = null;
+              _hasNoActiveAcademicYear = true;
+            }
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1094,13 +1112,26 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
         const SizedBox(width: 16),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: _hasNoActiveAcademicYear ? AppColors.coolGrayLight : AppColors.softLavender,
+            backgroundColor: _isSaving ? AppColors.coolGrayLight : AppColors.softLavender,
             foregroundColor: AppColors.pureWhite,
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            elevation: _hasNoActiveAcademicYear ? 0 : 1,
+            elevation: 1,
           ),
-          onPressed: (_isSaving || _hasNoActiveAcademicYear) ? null : _saveStudent,
+          onPressed: _isSaving
+              ? null
+              : () {
+                  if (_hasNoActiveAcademicYear || _selectedAcademicYearId == null || _selectedAcademicYearId!.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: AppColors.softCoral,
+                        content: Text('Please configure or select an Academic Year above before completing registration.'),
+                      ),
+                    );
+                    return;
+                  }
+                  _saveStudent();
+                },
           child: _isSaving
               ? const SizedBox(
                   width: 20,

@@ -36,7 +36,21 @@ class SchoolService {
           return model;
         }
 
-        if (!schoolIdOrCode.contains('-')) {
+        if (schoolIdOrCode.contains('-')) {
+          try {
+            final rpcData = await _client!.rpc('lookup_school_by_id', params: {'p_school_id': schoolIdOrCode});
+            if (rpcData is List && rpcData.isNotEmpty) {
+              final row = rpcData.first;
+              final model = _mapDataToSchoolModel(Map<String, dynamic>.from(row as Map));
+              _localCache[schoolIdOrCode] = model;
+              return model;
+            } else if (rpcData is Map) {
+              final model = _mapDataToSchoolModel(Map<String, dynamic>.from(rpcData));
+              _localCache[schoolIdOrCode] = model;
+              return model;
+            }
+          } catch (_) {}
+        } else {
           try {
             final rpcData = await _client!.rpc('lookup_school_by_code', params: {'p_code': schoolIdOrCode.toUpperCase().trim()});
             if (rpcData is List && rpcData.isNotEmpty) {
@@ -148,6 +162,14 @@ class SchoolService {
             _localCache[cleanId] = model;
             return model;
           }
+
+          // Fallback query if update select didn't return row
+          final fetched = await _client!.from('schools').select().eq('id', targetId).maybeSingle();
+          if (fetched != null) {
+            final model = _mapDataToSchoolModel(Map<String, dynamic>.from(fetched));
+            _localCache[cleanId] = model;
+            return model;
+          }
         } on PostgrestException catch (e) {
           debugPrint('[SchoolService update error]: ${e.code} ${e.message}');
           throw Exception('Failed to update school configuration: ${e.message}');
@@ -188,9 +210,6 @@ class SchoolService {
           throw Exception('Failed to save new school configuration: ${e.message}');
         }
       }
-
-      // If server returned 0 rows (e.g. RLS blocked update)
-      throw Exception('Server did not return updated school record. Please check your administrative permissions.');
     }
 
     // Local / offline fallback

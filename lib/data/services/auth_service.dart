@@ -57,15 +57,15 @@ class AuthService {
     final client = _client;
     if (SupabaseConfig.isConfigured && client != null) {
 
-      print('========================================');
-      print('LOGIN DEBUG');
-      print('email = $trimmedEmail');
-      print('SupabaseConfig.isConfigured = ${SupabaseConfig.isConfigured}');
-      print('Supabase client initialized = true');
-      print('currentUser before login = ${client.auth.currentUser?.email}');
-      print('currentSession before login = ${client.auth.currentSession != null}');
-      print('Supabase URL host = ${Uri.tryParse(SupabaseConfig.url)?.host ?? SupabaseConfig.url}');
-      print('========================================');
+      debugPrint('========================================');
+      debugPrint('LOGIN DEBUG');
+      debugPrint('email = $trimmedEmail');
+      debugPrint('SupabaseConfig.isConfigured = ${SupabaseConfig.isConfigured}');
+      debugPrint('Supabase client initialized = true');
+      debugPrint('currentUser before login = ${client.auth.currentUser?.email}');
+      debugPrint('currentSession before login = ${client.auth.currentSession != null}');
+      debugPrint('Supabase URL host = ${Uri.tryParse(SupabaseConfig.url)?.host ?? SupabaseConfig.url}');
+      debugPrint('========================================');
 
       try {
         final res = await client.auth.signInWithPassword(
@@ -76,22 +76,22 @@ class AuthService {
         final user = res.user ?? client.auth.currentUser;
         final sessionActive = client.auth.currentSession != null;
 
-        print('========================================');
-        print('AUTH RESULT');
-        print('success = true');
-        print('status/error code = 200');
-        print('error message = null');
-        print('returned user id = ${user?.id}');
-        print('returned user email = ${user?.email}');
-        print('session active = $sessionActive');
-        print('========================================');
+        debugPrint('========================================');
+        debugPrint('AUTH RESULT');
+        debugPrint('success = true');
+        debugPrint('status/error code = 200');
+        debugPrint('error message = null');
+        debugPrint('returned user id = ${user?.id}');
+        debugPrint('returned user email = ${user?.email}');
+        debugPrint('session active = $sessionActive');
+        debugPrint('========================================');
 
         if (user == null) {
           throw Exception('Authentication succeeded, but no user session was returned.');
         }
 
         final profile = await fetchUserProfile(user.id);
-        print('PROFILE LOOKUP: found=${profile != null}, role=${profile?.role}, schoolId=${profile?.schoolId}');
+        debugPrint('PROFILE LOOKUP: found=${profile != null}, role=${profile?.role}, schoolId=${profile?.schoolId}');
 
         if (profile == null) {
           await _client?.auth.signOut();
@@ -104,18 +104,18 @@ class AuthService {
           await _client?.auth.signOut();
           rethrow;
         }
-        print('ROLE VALIDATION: passed for ${profile.email}');
+        debugPrint('ROLE VALIDATION: passed for ${profile.email}');
         return profile;
       } on AuthException catch (e) {
-        print('========================================');
-        print('AUTH RESULT');
-        print('success = false');
-        print('status/error code = ${e.statusCode}');
-        print('error message = ${e.message}');
-        print('returned user id = null');
-        print('returned user email = null');
-        print('session active = false');
-        print('========================================');
+        debugPrint('========================================');
+        debugPrint('AUTH RESULT');
+        debugPrint('success = false');
+        debugPrint('status/error code = ${e.statusCode}');
+        debugPrint('error message = ${e.message}');
+        debugPrint('returned user id = null');
+        debugPrint('returned user email = null');
+        debugPrint('session active = false');
+        debugPrint('========================================');
 
         final msg = e.message.toLowerCase();
         if (msg.contains('email not confirmed')) {
@@ -132,15 +132,15 @@ class AuthService {
           throw Exception(e.message);
         }
       } catch (e) {
-        print('========================================');
-        print('AUTH RESULT');
-        print('success = false');
-        print('status/error code = unexpected_exception');
-        print('error message = $e');
-        print('returned user id = null');
-        print('returned user email = null');
-        print('session active = false');
-        print('========================================');
+        debugPrint('========================================');
+        debugPrint('AUTH RESULT');
+        debugPrint('success = false');
+        debugPrint('status/error code = unexpected_exception');
+        debugPrint('error message = $e');
+        debugPrint('returned user id = null');
+        debugPrint('returned user email = null');
+        debugPrint('session active = false');
+        debugPrint('========================================');
 
         final msg = e.toString().toLowerCase();
         if (msg.contains('failed to fetch') ||
@@ -309,6 +309,24 @@ class AuthService {
           await client.auth.refreshSession();
         } catch (refErr) {
           debugPrint('[AuthService Session Refresh Notice]: $refErr');
+        }
+
+        // Clear must_change_password in database profile if present
+        if (currentUser != null) {
+          try {
+            await client.from('profiles').update({
+              'must_change_password': false,
+              'updated_at': DateTime.now().toIso8601String(),
+            }).or('auth_user_id.eq.${currentUser.id},id.eq.${currentUser.id}');
+          } catch (_) {}
+        }
+
+        final uid = currentUser?.id;
+        if (uid != null) {
+          final idx = _mockProfiles.indexWhere((p) => p.authUserId == uid || p.id == uid);
+          if (idx != -1) {
+            _mockProfiles[idx] = _mockProfiles[idx].copyWith(mustChangePassword: false);
+          }
         }
 
         debugPrint('[AuthService] Password updated successfully for: ${res.user?.email}');
@@ -815,31 +833,47 @@ class AuthService {
         // Target existing table: public.profiles
         bool profileCreated = false;
 
-        // 1. Call secure RPC first
+        // 1. Call secure RPC first with all parameters
         try {
-          await _client!.rpc('create_staff_profile', params: {
+          final rpcRes = await _client!.rpc('create_staff_profile', params: {
             'p_auth_user_id': newAuthUserId,
             'p_school_id': schoolId,
             'p_full_name': name,
             'p_role': roleStr,
+            'p_employee_id': empId,
+            'p_designation': designation,
+            'p_assigned_class': parsedClassName.isNotEmpty ? parsedClassName : null,
+            'p_assigned_section': parsedSectionName.isNotEmpty ? parsedSectionName : null,
+            'p_phone': phone.isNotEmpty ? phone : null,
+            'p_email': trimmedEmail,
+            'p_subject': subject.isNotEmpty ? subject : null,
           });
-          profileCreated = true;
+          if (rpcRes != null) profileCreated = true;
         } catch (rpcErr) {
           debugPrint('[AuthService RPC create_staff_profile notice]: $rpcErr');
         }
 
         // 2. Direct upsert using active admin client
-        try {
-          await _client!.from('profiles').upsert({
-            'auth_user_id': newAuthUserId,
-            'school_id': schoolId,
-            'full_name': name,
-            'role': roleStr,
-            'status': 'active',
-          }, onConflict: 'auth_user_id');
-          profileCreated = true;
-        } catch (pErr) {
-          debugPrint('[AuthService direct profiles upsert notice]: $pErr');
+        if (!profileCreated) {
+          try {
+            await _client!.from('profiles').upsert({
+              'auth_user_id': newAuthUserId,
+              'school_id': schoolId,
+              'full_name': name,
+              'role': roleStr,
+              'status': 'active',
+              'employee_id': empId,
+              'designation': designation,
+              'assigned_class': parsedClassName.isNotEmpty ? parsedClassName : null,
+              'assigned_section': parsedSectionName.isNotEmpty ? parsedSectionName : null,
+              'phone': phone.isNotEmpty ? phone : null,
+              'email': trimmedEmail,
+              'subject': subject.isNotEmpty ? subject : null,
+            }, onConflict: 'auth_user_id');
+            profileCreated = true;
+          } catch (pErr) {
+            debugPrint('[AuthService direct profiles upsert notice]: $pErr');
+          }
         }
 
         // 3. Fallback: Isolated HTTP insert using newly created user's token (satisfies auth.uid() = auth_user_id RLS policy without affecting Admin session)
@@ -862,6 +896,13 @@ class AuthService {
                   'full_name': name,
                   'role': roleStr,
                   'status': 'active',
+                  'employee_id': empId,
+                  'designation': designation,
+                  'assigned_class': parsedClassName.isNotEmpty ? parsedClassName : null,
+                  'assigned_section': parsedSectionName.isNotEmpty ? parsedSectionName : null,
+                  'phone': phone.isNotEmpty ? phone : null,
+                  'email': trimmedEmail,
+                  'subject': subject.isNotEmpty ? subject : null,
                 }),
               );
               debugPrint('[AuthService isolated token profiles insert]: status=${profileRes.statusCode}, body=${profileRes.body}');
@@ -879,6 +920,10 @@ class AuthService {
         if (createdProfile != null) {
           debugPrint('[AuthService createStaffAccount complete]: Successfully verified $newAuthUserId in DB. Current Admin user: ${_client?.auth.currentUser?.email}');
           return createdProfile;
+        }
+
+        if (!profileCreated) {
+          throw Exception('Staff account created in Auth, but database profile could not be saved. Please verify database permissions.');
         }
 
         debugPrint('[AuthService createStaffAccount complete]: Auth user $newAuthUserId created and metadata linked. Current Admin: ${_client?.auth.currentUser?.email}');

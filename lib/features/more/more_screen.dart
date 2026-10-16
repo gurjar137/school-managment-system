@@ -55,6 +55,7 @@ class MoreScreen extends StatelessWidget {
             _ModuleItem('Fees & Dues', Icons.payments_outlined, AppColors.mutedGreen, '/fees'),
             _ModuleItem('Library', Icons.menu_book_outlined, AppColors.softLavender, '/library'),
             _ModuleItem('Transport', Icons.directions_bus_outlined, AppColors.amberDark, '/transport'),
+            _ModuleItem('Inventory', Icons.inventory_2_outlined, AppColors.softCoral, '/inventory'),
             _ModuleItem('Reports', Icons.bar_chart_rounded, AppColors.midnightNavy, '/reports'),
           ]),
           const SizedBox(height: 24),

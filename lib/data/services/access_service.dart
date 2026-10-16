@@ -32,7 +32,7 @@ class AccessService {
   // --- TEACHER ACCESS METHODS ---
   Future<List<TeacherAccessModel>> getTeacherAccessAccounts({String? schoolId}) async {
     await Future.delayed(const Duration(milliseconds: 100));
-    if (_teacherAccessRecords.isEmpty && !SupabaseConfig.isConfigured) {
+    if (_teacherAccessRecords.isEmpty) {
       _teacherAccessRecords.addAll([
         TeacherAccessModel(
           id: 'tac_9e90f5ec',

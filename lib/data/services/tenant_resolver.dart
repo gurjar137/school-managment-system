@@ -146,6 +146,17 @@ class TenantResolver {
         } catch (e) {
           debugPrint('[TenantResolver Self-Heal Warning]: $e');
         }
+
+        // If insert was blocked by RLS but JWT metadata contains verified school_id
+        if (profile == null) {
+          profile = {
+            'id': user.id,
+            'auth_user_id': user.id,
+            'school_id': metaSchoolId,
+            'role': meta?['role']?.toString().toLowerCase().trim() ?? 'school_admin',
+            'status': 'active',
+          };
+        }
       }
     }
 
@@ -249,11 +260,16 @@ class TenantResolver {
     } catch (_) {}
   }
 
-  /// Clears all validated user school caches.
+  /// Clears all validated user school caches and tenant cached directories.
   static Future<void> clearAllValidatedCaches() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys().where((k) => k.startsWith('validated_user_school_')).toList();
+      final keys = prefs.getKeys().where((k) =>
+          k.startsWith('validated_user_school_') ||
+          k.startsWith('cached_teachers_directory_') ||
+          k.startsWith('cached_library_books_') ||
+          k.startsWith('cached_school_notices_') ||
+          k.startsWith('cached_school_notifications_')).toList();
       for (final k in keys) {
         await prefs.remove(k);
       }

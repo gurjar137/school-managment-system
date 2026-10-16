@@ -9,8 +9,9 @@ import '../../data/models/class_section_models.dart';
 
 class ClassSectionsScreen extends ConsumerStatefulWidget {
   final SchoolClassModel? targetClass;
+  final String? classId;
 
-  const ClassSectionsScreen({super.key, this.targetClass});
+  const ClassSectionsScreen({super.key, this.targetClass, this.classId});
 
   @override
   ConsumerState<ClassSectionsScreen> createState() => _ClassSectionsScreenState();
@@ -27,7 +28,7 @@ class _ClassSectionsScreenState extends ConsumerState<ClassSectionsScreen> {
     final fallbackSchoolId = user?.schoolId ?? '';
 
     _cls = widget.targetClass ?? SchoolClassModel(
-      id: '',
+      id: widget.classId ?? '',
       schoolId: fallbackSchoolId,
       academicYearId: '',
       name: 'Class',
@@ -36,6 +37,27 @@ class _ClassSectionsScreenState extends ConsumerState<ClassSectionsScreen> {
       createdAt: DateTime.now(),
     );
 
+    if (widget.targetClass == null && widget.classId != null && widget.classId!.isNotEmpty) {
+      _resolveClassAsync(fallbackSchoolId, widget.classId!);
+    } else {
+      _refreshSections();
+    }
+  }
+
+  Future<void> _resolveClassAsync(String fallbackSchoolId, String classId) async {
+    final service = ref.read(classSectionServiceProvider);
+    String schoolId = fallbackSchoolId;
+    if (schoolId.isEmpty) {
+      try {
+        schoolId = await service.fetchActiveSchoolId();
+      } catch (_) {}
+    }
+    final resolved = await service.resolveClass(schoolId: schoolId, classIdentifier: classId);
+    if (resolved != null && mounted) {
+      setState(() {
+        _cls = resolved;
+      });
+    }
     _refreshSections();
   }
 
@@ -64,7 +86,10 @@ class _ClassSectionsScreenState extends ConsumerState<ClassSectionsScreen> {
             onPressed: _refreshSections,
           ),
           IconButton(
-            icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.softLavender),
+            icon: Icon(
+              Icons.add_circle_outline_rounded,
+              color: Theme.of(context).brightness == Brightness.dark ? AppColors.pureWhite : AppColors.primaryAccent,
+            ),
             tooltip: 'Add Section',
             onPressed: () => _showAddSectionModal(context),
           ),
@@ -231,6 +256,10 @@ class _ClassSectionsScreenState extends ConsumerState<ClassSectionsScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.midnightNavy,
+                foregroundColor: AppColors.pureWhite,
+              ),
               onPressed: () async {
                 if (nameCtrl.text.trim().isNotEmpty) {
                   try {

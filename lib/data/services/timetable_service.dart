@@ -203,7 +203,11 @@ class TimetableService {
           (entry.classId != null && existing.classDisplayCode != null && entry.classId!.replaceAll('_', '') == existing.classDisplayCode!.replaceAll('_', '')) ||
           (entry.classDisplayCode != null && existing.classId != null && entry.classDisplayCode!.replaceAll('_', '') == existing.classId!.replaceAll('_', ''));
 
-      final isSameSection = (entry.sectionId == null && existing.sectionId == null) ||
+      // Section collision: If either entry is 'All Sections' (null sectionId/displayCode/name),
+      // it applies to the entire class and therefore collides with any section of that class!
+      final isAllSectionsCollision = entry.sectionId == null || existing.sectionId == null;
+
+      final isSameSection = isAllSectionsCollision ||
           (entry.sectionId != null && existing.sectionId != null && entry.sectionId == existing.sectionId) ||
           (entry.sectionDisplayCode != null && existing.sectionDisplayCode != null && entry.sectionDisplayCode == existing.sectionDisplayCode) ||
           (entry.sectionId != null && existing.sectionDisplayCode != null && entry.sectionId!.replaceAll('_', '') == existing.sectionDisplayCode!.replaceAll('_', ''));
@@ -223,7 +227,7 @@ class TimetableService {
       final lastSecExisting = cleanExistingSec.isNotEmpty ? cleanExistingSec.substring(cleanExistingSec.length - 1) : '';
 
       final isClassNameMatch = cleanEntryClassName.isNotEmpty && cleanExistingClassName.isNotEmpty && cleanEntryClassName == cleanExistingClassName;
-      final isSectionMatch = (lastSecEntry.isEmpty && lastSecExisting.isEmpty) ||
+      final isSectionMatch = (lastSecEntry.isEmpty || lastSecExisting.isEmpty) ||
           (lastSecEntry.isNotEmpty && lastSecExisting.isNotEmpty && lastSecEntry == lastSecExisting);
 
       if ((isSameClass && isSameSection) || (isClassNameMatch && isSectionMatch)) {

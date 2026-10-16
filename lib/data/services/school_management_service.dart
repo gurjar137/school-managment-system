@@ -364,18 +364,16 @@ class SchoolManagementService {
           query = query.or('teacher_id.eq.$teacherId,requester_id.eq.$teacherId');
         }
         final res = await query.order('created_at', ascending: false);
-        if (res is List) {
-          final dbList = res.map((row) => TeacherLeaveModel.fromJson(row)).toList();
-          for (final item in dbList) {
-            final idx = _teacherLeaves.indexWhere((l) => l.id == item.id);
-            if (idx != -1) {
-              _teacherLeaves[idx] = item;
-            } else {
-              _teacherLeaves.add(item);
-            }
+        final dbList = res.map((row) => TeacherLeaveModel.fromJson(row)).toList();
+        for (final item in dbList) {
+          final idx = _teacherLeaves.indexWhere((l) => l.id == item.id);
+          if (idx != -1) {
+            _teacherLeaves[idx] = item;
+          } else {
+            _teacherLeaves.add(item);
           }
-          await _persistLeaves(schoolId);
         }
+        await _persistLeaves(schoolId);
       } catch (e) {
         debugPrint('[SchoolManagementService getAllLeaveRequests Warning]: $e');
       }
@@ -652,18 +650,16 @@ class SchoolManagementService {
           query = query.eq('school_id', schoolId);
         }
         final res = await query.order('meeting_date', ascending: true);
-        if (res is List) {
-          final dbList = res.map((row) => SchoolMeetingModel.fromJson(row)).toList();
-          for (final item in dbList) {
-            final idx = _meetings.indexWhere((m) => m.id == item.id);
-            if (idx != -1) {
-              _meetings[idx] = item;
-            } else {
-              _meetings.add(item);
-            }
+        final dbList = res.map((row) => SchoolMeetingModel.fromJson(row)).toList();
+        for (final item in dbList) {
+          final idx = _meetings.indexWhere((m) => m.id == item.id);
+          if (idx != -1) {
+            _meetings[idx] = item;
+          } else {
+            _meetings.add(item);
           }
-          await _persistMeetings(schoolId);
         }
+        await _persistMeetings(schoolId);
       } catch (e) {
         debugPrint('[SchoolManagementService getMeetings Warning]: $e');
       }

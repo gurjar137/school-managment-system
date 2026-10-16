@@ -7,6 +7,8 @@ import '../../core/providers/app_providers.dart';
 import '../../data/models/academic_models.dart';
 import '../../core/widgets/app_back_button.dart';
 
+import '../../core/utils/uuid_generator.dart';
+
 class CreateHomeworkScreen extends ConsumerStatefulWidget {
   const CreateHomeworkScreen({super.key});
 
@@ -30,7 +32,7 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
       try {
         final user = ref.read(authProvider);
         final newItem = HomeworkModel(
-          id: 'hw_${DateTime.now().millisecondsSinceEpoch}',
+          id: generateUuidV4(),
           subject: _selectedSubject,
           className: _selectedClass,
           section: _selectedSection,
@@ -45,13 +47,14 @@ class _CreateHomeworkScreenState extends ConsumerState<CreateHomeworkScreen> {
         await ref.read(schoolRepositoryProvider).addHomework(newItem, schoolId: user?.schoolId);
 
         if (mounted) {
+          setState(() => _isSaving = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               backgroundColor: AppColors.mutedGreen,
               content: Text('Homework assigned successfully!'),
             ),
           );
-          context.pop();
+          context.pop(true);
         }
       } catch (e) {
         if (mounted) {

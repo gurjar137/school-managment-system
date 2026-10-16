@@ -40,7 +40,12 @@ class _ClassesListScreenState extends ConsumerState<ClassesListScreen> {
     _schoolId = resolvedSchoolId;
 
     try {
-      final years = await service.fetchAcademicYears(_schoolId!);
+      var years = await service.fetchAcademicYears(_schoolId!);
+      if (years.isEmpty) {
+        try {
+          years = await ref.read(academicYearServiceProvider).fetchAcademicYears(_schoolId!);
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() {
           _years = years;
@@ -89,7 +94,7 @@ class _ClassesListScreenState extends ConsumerState<ClassesListScreen> {
           ),
           if (canManage)
             IconButton(
-              icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.softLavender),
+              icon: Icon(Icons.add_circle_outline_rounded, color: isDark ? AppColors.pureWhite : AppColors.primaryAccent),
               tooltip: 'Add Class',
               onPressed: () => _showAddClassModal(context),
             ),
@@ -108,7 +113,7 @@ class _ClassesListScreenState extends ConsumerState<ClassesListScreen> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.softLavender),
+                          const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primaryAccent),
                           const SizedBox(width: 8),
                           Text('Academic Session:', style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w800)),
                         ],
@@ -123,7 +128,10 @@ class _ClassesListScreenState extends ConsumerState<ClassesListScreen> {
                               value: y.id,
                               child: Text(
                                 'Session ${y.name}${y.isCurrent ? ' (Active)' : ''}',
-                                style: AppTypography.titleSmall.copyWith(color: AppColors.softLavender, fontWeight: FontWeight.w800),
+                                style: AppTypography.titleSmall.copyWith(
+                                  color: isDark ? AppColors.pureWhite : AppColors.primaryAccent,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             );
                           }).toList(),
@@ -270,7 +278,7 @@ class _ClassesListScreenState extends ConsumerState<ClassesListScreen> {
                                               ),
                                               ElevatedButton.icon(
                                                 style: ElevatedButton.styleFrom(
-                                                  backgroundColor: AppColors.softLavender,
+                                                  backgroundColor: AppColors.midnightNavy,
                                                   foregroundColor: AppColors.pureWhite,
                                                 ),
                                                 onPressed: () async {

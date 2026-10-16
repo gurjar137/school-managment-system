@@ -247,6 +247,7 @@ class SectionModel {
 
   bool get hasCanonicalUuid => RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(id);
   String get displayCode => code ?? 'sec_${classId}_$name';
+  String get displayName => 'Section $name';
 
   SectionModel copyWith({
     String? id,

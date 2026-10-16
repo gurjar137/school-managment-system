@@ -308,11 +308,16 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
           role: targetRole,
         );
 
-        final createdStaffId = isTeacherMode ? _empIdController.text.trim() : staffProfile.id;
+        final isValidUuid = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+        final createdStaffId = (staffProfile.id.isNotEmpty && isValidUuid.hasMatch(staffProfile.id))
+            ? staffProfile.id
+            : (staffProfile.authUserId.isNotEmpty && isValidUuid.hasMatch(staffProfile.authUserId)
+                ? staffProfile.authUserId
+                : _empIdController.text.trim());
 
         if (isTeacherMode) {
           final newTeacher = TeacherModel(
-            id: _empIdController.text.trim(),
+            id: createdStaffId,
             schoolId: activeSchoolId,
             employeeId: _empIdController.text.trim(),
             name: _nameController.text.trim(),
@@ -384,27 +389,27 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'A secure account has been created for . They will be required to change their password upon first login.',
+                'A secure account has been created for $name. They will be required to change their password upon first login.',
                 style: AppTypography.bodyMedium,
               ),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.softLavender.withOpacity(0.1),
+                  color: AppColors.softLavender.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.softLavender.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.softLavender.withValues(alpha: 0.3)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Name: ', style: AppTypography.labelLarge),
+                    Text('Name: $name', style: AppTypography.labelLarge),
                     const SizedBox(height: 4),
-                    Text('Email: ', style: AppTypography.bodyMedium),
+                    Text('Email: $email', style: AppTypography.bodyMedium),
                     const SizedBox(height: 4),
-                    Text('Employee ID: ', style: AppTypography.bodyMedium),
+                    Text('Employee ID: $empId', style: AppTypography.bodyMedium),
                     const SizedBox(height: 4),
-                    Text('Role: ', style: AppTypography.bodyMedium),
+                    Text('Role: $roleName', style: AppTypography.bodyMedium),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -429,7 +434,7 @@ class _AddEditTeacherScreenState extends ConsumerState<AddEditTeacherScreen> {
               icon: const Icon(Icons.copy_rounded, size: 18),
               label: const Text('Copy Credentials'),
               onPressed: () {
-                final details = 'School Portal Login\nName: \nEmail: \nEmployee ID: \nRole: ';
+                final details = 'School Portal Login\nName: $name\nEmail: $email\nEmployee ID: $empId\nRole: $roleName';
                 Clipboard.setData(ClipboardData(text: details));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Login details copied to clipboard!')),

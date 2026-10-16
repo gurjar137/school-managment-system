@@ -7,6 +7,7 @@ import '../models/school_management_app_model.dart';
 import '../models/school_app_subscription_model.dart';
 import '../models/school_model.dart';
 import '../models/user_model.dart';
+import 'school_service.dart';
 
 /// Centralized tenant resolution and access validation service.
 ///
@@ -90,7 +91,7 @@ class TenantAccessService {
       // -------------------------------------------------------------
       // 1. Resolve User Profile & Tenant school_id
       // -------------------------------------------------------------
-      final profileData = await client
+      var profileData = await client
           .from('profiles')
           .select('id, auth_user_id, school_id, status, role, email')
           .or('auth_user_id.eq.$authUserId,id.eq.$authUserId')
@@ -114,6 +115,30 @@ class TenantAccessService {
         final currentUser = client.auth.currentUser;
         if (currentUser != null && currentUser.id == authUserId && currentUser.userMetadata?['school_id'] != null) {
           rawSchoolId = currentUser.userMetadata!['school_id']?.toString().trim();
+
+          // Self-heal profile using verified JWT session token
+          try {
+            final meta = currentUser.userMetadata!;
+            final role = meta['role']?.toString().toLowerCase().trim() ?? 'teacher';
+            final fullName = meta['full_name']?.toString().trim() ?? currentUser.email?.split('@').first ?? 'Staff Member';
+            await client.from('profiles').upsert({
+              'id': currentUser.id,
+              'auth_user_id': currentUser.id,
+              'school_id': rawSchoolId,
+              'full_name': fullName,
+              'email': currentUser.email ?? '',
+              'role': role,
+              'status': 'active',
+            }, onConflict: 'auth_user_id');
+
+            profileData = await client
+                .from('profiles')
+                .select('id, auth_user_id, school_id, status, role, email')
+                .or('auth_user_id.eq.$authUserId,id.eq.$authUserId')
+                .maybeSingle();
+          } catch (e) {
+            debugPrint('[TenantAccessService Self-Heal Profile Notice]: $e');
+          }
         }
       }
 
@@ -147,6 +172,28 @@ class TenantAccessService {
             .eq('id', rawSchoolId)
             .maybeSingle();
       } catch (_) {}
+
+      // Try lookup_school_by_id RPC if direct query was blocked by RLS
+      if (schoolData == null) {
+        try {
+          final rpcData = await client.rpc('lookup_school_by_id', params: {'p_school_id': rawSchoolId});
+          if (rpcData is List && rpcData.isNotEmpty) {
+            schoolData = Map<String, dynamic>.from(rpcData.first as Map);
+          } else if (rpcData is Map) {
+            schoolData = Map<String, dynamic>.from(rpcData);
+          }
+        } catch (_) {}
+      }
+
+      // Try SchoolService cached or resolved school profile
+      if (schoolData == null) {
+        try {
+          final sProfile = await SchoolService().fetchSchoolProfile(rawSchoolId);
+          if (sProfile.name.isNotEmpty && sProfile.name != 'School') {
+            schoolData = sProfile.toJson();
+          }
+        } catch (_) {}
+      }
 
       // If initial select returned null, refresh session and retry once in case auth session token was refreshed or stale
       if (schoolData == null && client.auth.currentSession != null) {
@@ -194,13 +241,11 @@ class TenantAccessService {
               .eq('app_identifier', targetAppIdentifier)
               .maybeSingle();
         }
-        if (appData == null) {
-          appData = await client
-              .from('school_management_apps')
-              .select()
-              .eq('school_id', rawSchoolId)
-              .maybeSingle();
-        }
+        appData ??= await client
+            .from('school_management_apps')
+            .select()
+            .eq('school_id', rawSchoolId)
+            .maybeSingle();
         if (appData == null && targetAppIdentifier != null && targetAppIdentifier.isNotEmpty) {
           appData = await client
               .from('school_management_apps')
@@ -376,10 +421,19 @@ class TenantAccessService {
     }
 
     if (app == null) {
-      return AppAccessResult.blocked(
-        status: AppAccessStatus.appNotFound,
-        userMessage: 'Dedicated application record not found for this school.',
+      if ((configuredAppIdentifier != null && configuredAppIdentifier.trim().isNotEmpty) ||
+          (configuredSchoolId != null && configuredSchoolId.trim().isNotEmpty) ||
+          (expectedDevSchoolId != null && expectedDevSchoolId.trim().isNotEmpty)) {
+        return AppAccessResult.blocked(
+          status: AppAccessStatus.appNotFound,
+          userMessage: 'Dedicated application record not found for this school.',
+          school: school,
+        );
+      }
+      return AppAccessResult.allowed(
         school: school,
+        app: null,
+        subscription: null,
       );
     }
 

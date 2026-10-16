@@ -240,7 +240,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     // Toggle 1: Staff Timetable & Leave Alerts
                     SwitchListTile(
                       value: prefs.timetableAlerts,
-                      activeColor: AppColors.softLavender,
+                      activeColor: AppColors.primaryAccent,
+                      activeTrackColor: AppColors.primaryAccent.withValues(alpha: 0.35),
                       title: Text(
                         'Staff Timetable & Leave Alerts',
                         style: AppTypography.bodyMedium.copyWith(
@@ -274,7 +275,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     // Toggle 2: Parent Attendance Warnings
                     SwitchListTile(
                       value: prefs.attendanceAlerts,
-                      activeColor: AppColors.softLavender,
+                      activeColor: AppColors.primaryAccent,
+                      activeTrackColor: AppColors.primaryAccent.withValues(alpha: 0.35),
                       title: Text(
                         'Parent Attendance Warnings',
                         style: AppTypography.bodyMedium.copyWith(
@@ -308,7 +310,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     // Toggle 3: Fee Reminder Notices
                     SwitchListTile(
                       value: prefs.feeAlerts,
-                      activeColor: AppColors.softLavender,
+                      activeColor: AppColors.primaryAccent,
+                      activeTrackColor: AppColors.primaryAccent.withValues(alpha: 0.35),
                       title: Text(
                         'Fee Reminder Notices',
                         style: AppTypography.bodyMedium.copyWith(

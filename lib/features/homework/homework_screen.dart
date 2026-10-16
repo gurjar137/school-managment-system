@@ -9,11 +9,22 @@ import '../../core/widgets/reusable_widgets.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../data/models/academic_models.dart';
 
-class HomeworkScreen extends ConsumerWidget {
+class HomeworkScreen extends ConsumerStatefulWidget {
   const HomeworkScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeworkScreen> createState() => _HomeworkScreenState();
+}
+
+class _HomeworkScreenState extends ConsumerState<HomeworkScreen> {
+  int _refreshKey = 0;
+
+  void _reload() {
+    setState(() => _refreshKey++);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final repo = ref.watch(schoolRepositoryProvider);
     final user = ref.watch(authProvider);
 
@@ -24,40 +35,70 @@ class HomeworkScreen extends ConsumerWidget {
         title: Text('Homework Assignments', style: AppTypography.titleLarge),
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh list',
+            onPressed: _reload,
+          ),
+          IconButton(
             icon: const Icon(Icons.add_task_rounded),
-            onPressed: () => context.push('/homework-create'),
+            tooltip: 'Assign Homework',
+            onPressed: () async {
+              final created = await context.push('/homework-create');
+              if (created == true && mounted) {
+                _reload();
+              }
+            },
           ),
         ],
       ),
-      body: FutureBuilder(
-        future: repo.getHomework(schoolId: user?.schoolId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const LoadingStateWidget(message: 'Fetching homework records...');
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Text('Error loading homework: ${snapshot.error}', textAlign: TextAlign.center),
-              ),
-            );
-          }
-          final list = snapshot.data ?? [];
-          if (list.isEmpty) {
-            return const EmptyStateWidget(
-              title: 'No Homework Assigned',
-              message: 'No active homework assignments for your classes.',
-              icon: Icons.assignment_outlined,
-            );
-          }
+      body: RefreshIndicator(
+        onRefresh: () async => _reload(),
+        child: FutureBuilder(
+          key: ValueKey(_refreshKey),
+          future: repo.getHomework(schoolId: user?.schoolId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const LoadingStateWidget(message: 'Fetching homework records...');
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Error loading homework: ${snapshot.error}', textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: _reload,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+            final list = snapshot.data ?? [];
+            if (list.isEmpty) {
+              return ListView(
+                children: [
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                  const EmptyStateWidget(
+                    title: 'No Homework Assigned',
+                    message: 'No active homework assignments for your classes.',
+                    icon: Icons.assignment_outlined,
+                  ),
+                ],
+              );
+            }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: list.length,
-            itemBuilder: (context, index) {
-              final hw = list[index];
-              final dateStr = DateFormat('MMM dd, yyyy').format(hw.dueDate);
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: list.length,
+              itemBuilder: (context, index) {
+                final hw = list[index];
+                final dateStr = DateFormat('MMM dd, yyyy').format(hw.dueDate);
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -108,7 +149,8 @@ class HomeworkScreen extends ConsumerWidget {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
+    ),
+    floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/homework-create'),
         backgroundColor: AppColors.midnightNavy,
         foregroundColor: AppColors.pureWhite,

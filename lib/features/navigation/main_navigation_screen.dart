@@ -303,7 +303,7 @@ class MainNavigationScreen extends ConsumerWidget {
       _buildSidebarItem(context, 'Notice Board', Icons.campaign_rounded, '/notices', currentPath.startsWith('/notice'), isDark),
       _buildSidebarItem(context, 'Transport', Icons.directions_bus_rounded, '/transport', currentPath.startsWith('/transport'), isDark),
       _buildSidebarItem(context, 'Library', Icons.local_library_rounded, '/library', currentPath.startsWith('/library'), isDark),
-      _buildSidebarItem(context, 'Inventory', Icons.inventory_2_rounded, '/more', false, isDark),
+      _buildSidebarItem(context, 'Inventory', Icons.inventory_2_rounded, '/inventory', currentPath.startsWith('/inventory'), isDark),
       _buildSidebarItem(context, 'Communications', Icons.chat_bubble_outline_rounded, '/notifications', currentPath.startsWith('/notification'), isDark),
       _buildSidebarItem(context, 'Reports', Icons.pie_chart_rounded, '/reports', currentPath.startsWith('/report'), isDark),
       _buildSidebarItem(context, 'Settings', Icons.tune_rounded, '/school-settings', currentPath.startsWith('/school-settings') || currentPath == '/settings', isDark),

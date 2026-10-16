@@ -224,14 +224,30 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
                                 ],
                               ),
                               const SizedBox(height: 10),
-                              Text(n.title, style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.w800)),
-                              const SizedBox(height: 6),
-                              Text(
-                                n.content,
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTypography.bodyMedium,
-                              ),
+                              Builder(builder: (c) {
+                                final isDark = Theme.of(c).brightness == Brightness.dark;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      n.title,
+                                      style: AppTypography.titleMedium.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        color: isDark ? AppColors.pureWhite : AppColors.primaryText,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      n.content,
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTypography.bodyMedium.copyWith(
+                                        color: isDark ? AppColors.coolGray : AppColors.primaryText.withOpacity(0.85),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }),
                               const SizedBox(height: 12),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -341,9 +357,12 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
         ),
         actions: [
           if (isAdmin) ...[
-            if (notice.status == 'Draft')
+            if (notice.status.toLowerCase() == 'draft')
               ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.mutedGreen),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.mutedGreen,
+                  foregroundColor: AppColors.pureWhite,
+                ),
                 icon: const Icon(Icons.publish_rounded, size: 16),
                 label: const Text('Publish Now'),
                 onPressed: () async {
@@ -361,12 +380,46 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
                     messenger.showSnackBar(
                       const SnackBar(
                         backgroundColor: AppColors.mutedGreen,
-                        content: Text('Notice published! Notification sent to target audience.'),
+                        content: Text('Notice published! Notification delivered to target audience.'),
                       ),
                     );
                   }
                 },
               ),
+            TextButton.icon(
+              icon: Icon(
+                notice.isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
+                size: 16,
+                color: AppColors.primaryAccent,
+              ),
+              label: Text(
+                notice.isPinned ? 'Unpin' : 'Pin to Top',
+                style: const TextStyle(color: AppColors.primaryAccent),
+              ),
+              onPressed: () async {
+                final repo = ref.read(schoolRepositoryProvider);
+                final user = ref.read(authProvider);
+                await repo.updateNotice(
+                  notice.copyWith(isPinned: !notice.isPinned),
+                  schoolId: user?.schoolId,
+                );
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  setState(() => _refreshCounter++);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(notice.isPinned ? 'Notice unpinned.' : 'Notice pinned to top.')),
+                  );
+                }
+              },
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.edit_outlined, size: 16, color: AppColors.primaryAccent),
+              label: const Text('Edit', style: TextStyle(color: AppColors.primaryAccent)),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showNoticeDialog(context, existingNotice: notice);
+              },
+            ),
             TextButton(
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
@@ -374,11 +427,14 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
                   context: context,
                   builder: (dCtx) => AlertDialog(
                     title: const Text('Delete Notice?'),
-                    content: const Text('Are you sure you want to remove this bulletin announcement?'),
+                    content: const Text('Are you sure you want to remove this bulletin announcement and its notifications?'),
                     actions: [
                       TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('Cancel')),
                       ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.softCoral),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.softCoral,
+                          foregroundColor: AppColors.pureWhite,
+                        ),
                         onPressed: () => Navigator.pop(dCtx, true),
                         child: const Text('Delete'),
                       ),
@@ -389,6 +445,7 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
                   final repo = ref.read(schoolRepositoryProvider);
                   final user = ref.read(authProvider);
                   await repo.deleteNotice(notice.id, schoolId: user?.schoolId);
+                  ref.invalidate(unreadNotificationsCountProvider);
                   if (ctx.mounted) Navigator.pop(ctx);
                   if (mounted) {
                     setState(() => _refreshCounter++);
@@ -407,14 +464,15 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
     );
   }
 
-  void _showNoticeDialog(BuildContext context) {
-    final titleController = TextEditingController();
-    final contentController = TextEditingController();
-    final attachmentController = TextEditingController();
-    String category = 'General';
-    String targetAudience = 'All Staff';
-    String status = 'Published';
-    bool isPinned = false;
+  void _showNoticeDialog(BuildContext context, {NoticeModel? existingNotice}) {
+    final isEditing = existingNotice != null;
+    final titleController = TextEditingController(text: existingNotice?.title ?? '');
+    final contentController = TextEditingController(text: existingNotice?.content ?? '');
+    final attachmentController = TextEditingController(text: existingNotice?.attachmentUrl ?? '');
+    String category = existingNotice?.category ?? 'General';
+    String targetAudience = existingNotice?.targetAudience ?? 'All Staff';
+    String status = existingNotice?.status ?? 'Published';
+    bool isPinned = existingNotice?.isPinned ?? false;
     final formKey = GlobalKey<FormState>();
 
     showDialog(
@@ -422,7 +480,10 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            title: Text('Post School Announcement', style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold)),
+            title: Text(
+              isEditing ? 'Edit School Announcement' : 'Post School Announcement',
+              style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold),
+            ),
             content: SizedBox(
               width: 480,
               child: SingleChildScrollView(
@@ -530,43 +591,77 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
             actions: [
               TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.midnightNavy,
+                  foregroundColor: AppColors.pureWhite,
+                ),
                 onPressed: () async {
                   if (formKey.currentState?.validate() ?? false) {
                     final messenger = ScaffoldMessenger.of(context);
                     final repo = ref.read(schoolRepositoryProvider);
                     final user = ref.read(authProvider);
 
-                    final newNotice = NoticeModel(
-                      id: 'notice_${DateTime.now().millisecondsSinceEpoch}',
-                      schoolId: user?.schoolId ?? '',
-                      title: titleController.text.trim(),
-                      content: contentController.text.trim(),
-                      category: category,
-                      targetAudience: targetAudience,
-                      status: status,
-                      date: DateTime.now(),
-                      author: user?.name ?? 'Administration',
-                      isPinned: isPinned,
-                      isUnread: true,
-                      attachmentUrl: attachmentController.text.trim().isNotEmpty ? attachmentController.text.trim() : null,
-                    );
-
-                    Navigator.of(ctx).pop();
-                    await repo.addNotice(newNotice, schoolId: user?.schoolId);
-                    ref.invalidate(unreadNotificationsCountProvider);
-
-                    if (mounted) {
-                      setState(() => _refreshCounter++);
-                      messenger.showSnackBar(
-                        SnackBar(
-                          content: Text(status == 'Published' ? 'Notice published successfully!' : 'Notice saved as draft.'),
-                          backgroundColor: status == 'Published' ? AppColors.mutedGreen : AppColors.warmAmber,
-                        ),
+                    if (isEditing) {
+                      final updatedNotice = existingNotice.copyWith(
+                        title: titleController.text.trim(),
+                        content: contentController.text.trim(),
+                        category: category,
+                        targetAudience: targetAudience,
+                        status: status,
+                        isPinned: isPinned,
+                        attachmentUrl: attachmentController.text.trim().isNotEmpty ? attachmentController.text.trim() : null,
                       );
+
+                      Navigator.of(ctx).pop();
+                      await repo.updateNotice(updatedNotice, schoolId: user?.schoolId);
+                      ref.invalidate(unreadNotificationsCountProvider);
+
+                      if (mounted) {
+                        setState(() => _refreshCounter++);
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('Notice updated successfully!'),
+                            backgroundColor: AppColors.mutedGreen,
+                          ),
+                        );
+                      }
+                    } else {
+                      final newNotice = NoticeModel(
+                        id: '',
+                        schoolId: user?.schoolId ?? '',
+                        title: titleController.text.trim(),
+                        content: contentController.text.trim(),
+                        category: category,
+                        targetAudience: targetAudience,
+                        status: status,
+                        date: DateTime.now(),
+                        author: user?.name ?? 'Administration',
+                        isPinned: isPinned,
+                        isUnread: true,
+                        attachmentUrl: attachmentController.text.trim().isNotEmpty ? attachmentController.text.trim() : null,
+                      );
+
+                      Navigator.of(ctx).pop();
+                      await repo.addNotice(newNotice, schoolId: user?.schoolId);
+                      ref.invalidate(unreadNotificationsCountProvider);
+
+                      if (mounted) {
+                        setState(() => _refreshCounter++);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(status == 'Published' ? 'Notice published successfully!' : 'Notice saved as draft.'),
+                            backgroundColor: status == 'Published' ? AppColors.mutedGreen : AppColors.warmAmber,
+                          ),
+                        );
+                      }
                     }
                   }
                 },
-                child: Text(status == 'Published' ? 'Publish Notice' : 'Save Draft'),
+                child: Text(
+                  isEditing
+                      ? 'Save Changes'
+                      : (status == 'Published' ? 'Publish Notice' : 'Save Draft'),
+                ),
               ),
             ],
           );

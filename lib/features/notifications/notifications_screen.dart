@@ -256,67 +256,78 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Expanded(
-                                                  child: Row(
+                                            Builder(builder: (c) {
+                                              final isDark = Theme.of(c).brightness == Brightness.dark;
+                                              return Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                     children: [
-                                                      Flexible(
-                                                        child: Text(
-                                                          n.title,
-                                                          style: AppTypography.titleSmall.copyWith(
-                                                            fontWeight: n.isUnread ? FontWeight.w800 : FontWeight.w600,
-                                                          ),
+                                                      Expanded(
+                                                        child: Row(
+                                                          children: [
+                                                            Flexible(
+                                                              child: Text(
+                                                                n.title,
+                                                                style: AppTypography.titleSmall.copyWith(
+                                                                  fontWeight: n.isUnread ? FontWeight.w800 : FontWeight.w600,
+                                                                  color: isDark ? AppColors.pureWhite : AppColors.primaryText,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            if (n.isUnread) ...[
+                                                              const SizedBox(width: 6),
+                                                              Container(
+                                                                width: 7,
+                                                                height: 7,
+                                                                decoration: const BoxDecoration(
+                                                                  color: AppColors.primaryAccent,
+                                                                  shape: BoxShape.circle,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ],
                                                         ),
                                                       ),
-                                                      if (n.isUnread) ...[
-                                                        const SizedBox(width: 6),
-                                                        Container(
-                                                          width: 7,
-                                                          height: 7,
-                                                          decoration: const BoxDecoration(
+                                                      const SizedBox(width: 8),
+                                                      Text(
+                                                        timeAgo,
+                                                        style: AppTypography.bodySmall.copyWith(
+                                                          color: AppColors.coolGray,
+                                                          fontSize: 10,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 5),
+                                                  Text(
+                                                    n.message,
+                                                    style: AppTypography.bodySmall.copyWith(
+                                                      color: n.isUnread
+                                                          ? (isDark ? AppColors.pureWhite : AppColors.primaryText)
+                                                          : (isDark ? AppColors.coolGray : AppColors.secondaryText),
+                                                    ),
+                                                  ),
+                                                  if (hasActionRoute) ...[
+                                                    const SizedBox(height: 8),
+                                                    Row(
+                                                      mainAxisAlignment: MainAxisAlignment.end,
+                                                      children: [
+                                                        Text(
+                                                          'Tap to view details →',
+                                                          style: AppTypography.labelSmall.copyWith(
                                                             color: AppColors.primaryAccent,
-                                                            shape: BoxShape.circle,
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.w700,
                                                           ),
                                                         ),
                                                       ],
-                                                    ],
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Text(
-                                                  timeAgo,
-                                                  style: AppTypography.bodySmall.copyWith(
-                                                    color: AppColors.coolGray,
-                                                    fontSize: 10,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 5),
-                                            Text(
-                                              n.message,
-                                              style: AppTypography.bodySmall.copyWith(
-                                                color: n.isUnread ? AppColors.primaryText : AppColors.secondaryText,
-                                              ),
-                                            ),
-                                            if (hasActionRoute) ...[
-                                              const SizedBox(height: 8),
-                                              Row(
-                                                mainAxisAlignment: MainAxisAlignment.end,
-                                                children: [
-                                                  Text(
-                                                    'Tap to view details →',
-                                                    style: AppTypography.labelSmall.copyWith(
-                                                      color: AppColors.primaryAccent,
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.w700,
                                                     ),
-                                                  ),
+                                                  ],
                                                 ],
-                                              ),
-                                            ],
+                                              );
+                                            }),
                                           ],
                                         ),
                                       ),

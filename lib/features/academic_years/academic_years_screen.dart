@@ -151,9 +151,10 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: AppColors.softLavender,
+            backgroundColor: newStatus == AccountStatus.active ? AppColors.mutedGreen : AppColors.midnightNavy,
             content: Text(
               'Academic Year "${year.name}" is now ${newStatus == AccountStatus.active ? 'ACTIVE' : 'INACTIVE'}',
+              style: const TextStyle(color: AppColors.pureWhite),
             ),
           ),
         );
@@ -277,7 +278,10 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
                 child: const Text('Close'),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.softLavender),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.midnightNavy,
+                  foregroundColor: AppColors.pureWhite,
+                ),
                 onPressed: () {
                   Navigator.pop(ctx);
                   _toggleStatus(year);
@@ -386,10 +390,10 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: AppColors.softLavender.withValues(alpha: 0.15),
+                              color: AppColors.primaryAccent.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.calendar_month_rounded, color: AppColors.softLavender, size: 28),
+                            child: const Icon(Icons.calendar_month_rounded, color: AppColors.primaryAccent, size: 28),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -415,7 +419,8 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
                           ),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.softLavender,
+                              backgroundColor: AppColors.midnightNavy,
+                              foregroundColor: AppColors.pureWhite,
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                             ),
                             icon: const Icon(Icons.add, size: 18),
@@ -449,7 +454,10 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
                                 ),
                                 const SizedBox(height: 16),
                                 ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.softLavender),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.midnightNavy,
+                                    foregroundColor: AppColors.pureWhite,
+                                  ),
                                   icon: const Icon(Icons.add, size: 18),
                                   label: const Text('Create First Academic Year'),
                                   onPressed: _showCreateDialog,
@@ -468,7 +476,7 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
                           padding: const EdgeInsets.only(bottom: 12),
                           child: BentoCard(
                             border: isCurrent
-                                ? Border.all(color: AppColors.softLavender, width: 1.5)
+                                ? Border.all(color: AppColors.primaryAccent, width: 1.5)
                                 : null,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -490,19 +498,19 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                         decoration: BoxDecoration(
-                                          color: AppColors.softLavender.withValues(alpha: 0.2),
+                                          color: AppColors.primaryAccent.withValues(alpha: 0.12),
                                           borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: AppColors.softLavender, width: 0.8),
+                                          border: Border.all(color: AppColors.primaryAccent.withValues(alpha: 0.5), width: 0.8),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Icon(Icons.star_rounded, size: 14, color: AppColors.softLavender),
+                                            const Icon(Icons.star_rounded, size: 14, color: AppColors.primaryAccent),
                                             const SizedBox(width: 4),
                                             Text(
                                               'CURRENT YEAR',
                                               style: AppTypography.labelSmall.copyWith(
-                                                color: AppColors.softLavender,
+                                                color: AppColors.primaryAccent,
                                                 fontWeight: FontWeight.w800,
                                                 fontSize: 10,
                                               ),
@@ -569,8 +577,8 @@ class _AcademicYearsScreenState extends ConsumerState<AcademicYearsScreen> {
                                         if (!isCurrent && isActive)
                                           ElevatedButton.icon(
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor: AppColors.softLavender,
-                                              foregroundColor: Colors.white,
+                                              backgroundColor: AppColors.primaryAccent,
+                                              foregroundColor: AppColors.pureWhite,
                                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                               textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                                             ),
@@ -968,11 +976,14 @@ class _AcademicYearDialogState extends State<AcademicYearDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.softLavender),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.midnightNavy,
+            foregroundColor: AppColors.pureWhite,
+          ),
           onPressed: _isSubmitting ? null : _handleSave,
           child: _isSubmitting
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.pureWhite))
-              : Text(widget.submitLabel, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+              : Text(widget.submitLabel, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.pureWhite)),
         ),
       ],
     );

@@ -90,7 +90,20 @@ class ClassSectionService {
           query = query.eq('academic_year_id', cleanAyId);
         }
 
-        final data = await query.order('display_order', ascending: true);
+        var data = await query.order('display_order', ascending: true);
+
+        // Fallback: If filtering by specific academic_year_id returned 0 rows,
+        // query all classes for the school so classes created under default session or null session are loaded.
+        if (data.isEmpty && cleanAyId.isNotEmpty && isUuid(cleanAyId)) {
+          final fallbackData = await _client!
+              .from('classes')
+              .select()
+              .eq('school_id', cleanSchoolId)
+              .order('display_order', ascending: true);
+          if (fallbackData.isNotEmpty) {
+            data = fallbackData;
+          }
+        }
 
         if (data.isNotEmpty) {
           final rawList = List<Map<String, dynamic>>.from(data);
@@ -221,17 +234,30 @@ class ClassSectionService {
     int displayOrder = 1,
   }) async {
     final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      throw Exception('Class name cannot be empty.');
+    }
     if (schoolId.trim().isEmpty) {
       throw const TenantResolutionException('Cannot create class without a valid school ID.');
     }
+
+    // Check for duplicate class name within the same school and session
+    final existingClasses = await fetchClasses(schoolId, academicYearId);
+    if (existingClasses.any((c) => c.name.trim().toLowerCase() == trimmedName.toLowerCase())) {
+      throw Exception('A class named "$trimmedName" already exists for this academic session.');
+    }
+
     if (_client != null && SupabaseConfig.isConfigured) {
-      final res = await _client!.from('classes').insert({
+      final payload = <String, dynamic>{
         'school_id': schoolId,
-        'academic_year_id': academicYearId,
         'name': trimmedName,
         'display_order': displayOrder,
         'status': 'ACTIVE',
-      }).select().single();
+      };
+      if (isUuid(academicYearId)) {
+        payload['academic_year_id'] = academicYearId;
+      }
+      final res = await _client!.from('classes').insert(payload).select().single();
       return _mapClass(res);
     }
     throw Exception('Database not connected. Cannot create class.');
@@ -249,6 +275,26 @@ class ClassSectionService {
 
   Future<void> deleteClass(String classId, {String? schoolId}) async {
     if (_client != null && SupabaseConfig.isConfigured) {
+      // 1. Dependency check: Check for enrolled students
+      try {
+        final students = await _client!.from('students').select('id').eq('class_id', classId).limit(1);
+        if (students.isNotEmpty) {
+          throw Exception('Cannot delete this class because it has enrolled students. Please reassign or remove students first.');
+        }
+      } catch (e) {
+        if (e.toString().contains('enrolled students')) rethrow;
+      }
+
+      // 2. Dependency check: Check for timetable entries
+      try {
+        final timetable = await _client!.from('timetable').select('id').eq('class_id', classId).limit(1);
+        if (timetable.isNotEmpty) {
+          throw Exception('Cannot delete this class because it has scheduled timetable periods. Please clear its timetable schedule first.');
+        }
+      } catch (e) {
+        if (e.toString().contains('scheduled timetable periods')) rethrow;
+      }
+
       try {
         var secDelete = _client!.from('sections').delete().eq('class_id', classId);
         if (schoolId != null && schoolId.isNotEmpty) {
@@ -325,19 +371,32 @@ class ClassSectionService {
     int? capacity,
   }) async {
     final trimmedName = name.trim();
+    if (trimmedName.isEmpty) {
+      throw Exception('Section name cannot be empty.');
+    }
     if (schoolId.trim().isEmpty) {
       throw const TenantResolutionException('Cannot create section without a valid school ID.');
     }
+
+    // Check for duplicate section name within this class
+    final existingSections = await fetchSections(schoolId, classId);
+    if (existingSections.any((s) => s.name.trim().toLowerCase() == trimmedName.toLowerCase())) {
+      throw Exception('A section named "$trimmedName" already exists for this class.');
+    }
+
     if (_client != null && SupabaseConfig.isConfigured) {
-      final res = await _client!.from('sections').insert({
+      final payload = <String, dynamic>{
         'school_id': schoolId,
-        'academic_year_id': academicYearId,
         'class_id': classId,
         'name': trimmedName,
         'capacity': capacity,
         'display_order': 1,
         'status': 'ACTIVE',
-      }).select().single();
+      };
+      if (isUuid(academicYearId)) {
+        payload['academic_year_id'] = academicYearId;
+      }
+      final res = await _client!.from('sections').insert(payload).select().single();
       return _mapSection(res);
     }
     throw Exception('Database not connected. Cannot create section.');
@@ -345,6 +404,26 @@ class ClassSectionService {
 
   Future<void> deleteSection(String sectionId, {String? schoolId}) async {
     if (_client != null && SupabaseConfig.isConfigured) {
+      // 1. Dependency check: Enrolled students
+      try {
+        final students = await _client!.from('students').select('id').eq('section_id', sectionId).limit(1);
+        if (students.isNotEmpty) {
+          throw Exception('Cannot delete this section because students are currently enrolled in it. Please reassign students first.');
+        }
+      } catch (e) {
+        if (e.toString().contains('students are currently enrolled')) rethrow;
+      }
+
+      // 2. Dependency check: Timetable periods
+      try {
+        final timetable = await _client!.from('timetable').select('id').eq('section_id', sectionId).limit(1);
+        if (timetable.isNotEmpty) {
+          throw Exception('Cannot delete this section because it has active timetable periods. Please clear its timetable schedule first.');
+        }
+      } catch (e) {
+        if (e.toString().contains('active timetable periods')) rethrow;
+      }
+
       var query = _client!.from('sections').delete().eq('id', sectionId);
       if (schoolId != null && schoolId.isNotEmpty) {
         query = query.eq('school_id', schoolId);
@@ -355,12 +434,13 @@ class ClassSectionService {
 
   // --- MAPPERS ---
   AcademicYearModel _mapAcademicYear(Map<String, dynamic> data) {
+    final statusRaw = data['status']?.toString().toUpperCase() ?? 'ACTIVE';
     return AcademicYearModel(
       id: data['id']?.toString() ?? '',
       schoolId: data['school_id']?.toString() ?? '',
       name: data['name']?.toString() ?? '',
-      isCurrent: data['is_current'] == true,
-      status: (data['status']?.toString().toUpperCase() == 'INACTIVE') ? AccountStatus.inactive : AccountStatus.active,
+      isCurrent: data['is_current'] == true || (statusRaw == 'ACTIVE' && data['is_current'] != false),
+      status: (statusRaw == 'INACTIVE') ? AccountStatus.inactive : AccountStatus.active,
       createdAt: DateTime.tryParse(data['created_at']?.toString() ?? '') ?? DateTime.now(),
     );
   }
